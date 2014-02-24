@@ -15,48 +15,27 @@ module.exports = function (grunt) {
         files: [
           '<%= paths.demo %>/{,*/}*.js'
         ],
-        tasks: ['newer:jshint:all'],
-        options: {
-          livereload: true
-        }
+        tasks: ['newer:jshint:all']
       },
       jsTest: {
         files: [
           '<%= paths.demo %>/{,*/}*.js',
+          'test/*.js',
           'test/spec/{,*/}*.js'
         ],
         tasks: ['newer:jshint:test', 'karma:unit']
-      },
-      livereload: {
-        options: {
-          livereload: '<%= connect.options.livereload %>'
-        },
-        files: [
-          '<%= paths.demo %>/index.html',
-          '.tmp/styles/{,*/}*.css'
-        ]
       }
     },
 
     connect: {
       options: {
-        port: 9000,
-        hostname: 'localhost',
-        livereload: 35729
-      },
-
-      livereload: {
-        options: {
-          base: [
-            '.tmp',
-            '<%= paths.demo %>'
-          ]
-        }
+        port: 9010,
+        hostname: 'localhost'
       },
 
       test: {
         options: {
-          port: 9001,
+          port: 9011,
           base: [
             '.tmp',
             'test',
@@ -124,4 +103,9 @@ module.exports = function (grunt) {
       'watch'
     ]);
   });
+  
+  grunt.registerTask('livetest', [
+    'karma:unit',
+    'watch'
+  ]);
 };
