@@ -21,6 +21,7 @@
     "karma-ng-html2js-preprocessor": "^0.1.0",
     "karma-ie-launcher": "^0.1.1",
     "karma-safari-launcher": "^0.1.1",
+    "karma-coverage": "~0.2",
     "grunt-contrib-connect": "^0.6.0",
     "grunt-open": "^0.2.3",
     "grunt-bower-install": "^1.0.0",

@@ -43,70 +43,143 @@ lhTimeline.service('MockTimeline', function($rootScope, serviceUtils) {
   return channelService;
 });
 
-lhTimeline.service('MockChannel', function($rootScope) {
-  var contentService = {
-    channels: {
-      channelId1: [
-        {
-          _id: 'contentId1'
-          , start: new Date(2014, 0, 23, 9, 15)
-          , end: new Date(2014, 0, 23, 9, 16)
-          , filename: "/path/to/audio1.mp3"
-        }
-        , {
-          _id: 'contentId2'
-          , start: new Date(2014, 0, 23, 9, 17)
-          , end: new Date(2014, 0, 23, 9, 21)
-          , filename: "/path/to/audio2.mp3"
-        }
-        , {
-          _id: 'contentId3'
-          , start: new Date(2014, 0, 23, 9, 43)
-          , end: new Date(2014, 0, 23, 9, 48)
-          , filename: "/path/to/audio3.mp3"
-        }
-      ]
-      , channelId2: [
-        {
-          _id: 'contentId4'
-          , start: new Date(2014, 0, 23, 9, 10)
-          , filename: "/path/to/cap1.png"
-        }
-        , {
-          _id: 'contentId5'
-          , start: new Date(2014, 0, 23, 9, 16)
-          , filename: "/path/to/cap2.png"
-        }
-        , {
-          _id: 'contentId6'
-          , start: new Date(2014, 0, 23, 9, 25)
-          , filename: "/path/to/cap3.png"
-        }
-      ]
-      , channelId3: [
-        {
-          _id: 'contentId7'
-          , start: new Date(2014, 0, 23, 9, 17)
-          , end: new Date(2014, 0, 23, 9, 21)
-          , location: {latitude: 28.0131, longitude: -153.23123}
-        }
-        , {
-          _id: 'contentId8'
-          , start: new Date(2014, 0, 23, 9, 17)
-          , end: new Date(2014, 0, 23, 9, 21)
-          , location: {latitude: 28.0131, longitude: -153.23123}
-        }
-        , {
-          _id: 'contentId8'
-          , start: new Date(2014, 0, 23, 9, 17)
-          , end: new Date(2014, 0, 23, 9, 21)
-          , location: {latitude: 28.0131, longitude: -153.23123}
-        }
-      ]
+lhTimeline.service('MockChannel', function($rootScope, $timeout) {
+  var contentService
+    , current
+    , scope;
+  
+  scope = $rootScope.new();
+  
+  contentService = {
+    channels: function(start, end) {
+      var key
+        , audioContent
+        , screenCapContent
+        , locationContent;
+      
+      
+      
+      // Random create audio content
+      audioContent = generateMockData('audio', start, end);
+      // Random create screen capture content
+      screenCapContent = generateMockData('screencap', start, end);
+      // Random create location content
+      locationContent = generateMockData('location', start, end);
+      
+      return {
+        channelId1: audioContent
+        , channelId2: screenCapContent
+        , channelId3: locationContent
+      };
     }
   };
   
-  contentService.prototype.getContent = function(channelId) {
-    return this.channels[channeldId];
+  contentService.prototype.get = function(start, end, success) {
+    $timeout(function() {
+      success(this.channels(start, end));
+    }, 100)
   };
+  
+  current = 0;
+  $rootScope.refresh = function() {
+    current += 1;
+  }
+  
+  $rootScope.insert = function() {
+    scope.$broadcast('insert.channelItem');
+  }
+/*
+  contentService.prototype.loading = function(value) {
+    
+  };
+*/
+  
+  contentService.prototype.revision = function() {
+    return current;
+  };
+  
+  // Private functions
+  function getRandomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1) + min);
+  }
+  
+  function getRandomChoice(list) {
+    var index;
+    if (!list instanceof Array) {
+      return null;
+    }
+    
+    index = getRandomInt(0, list.length);
+    return list[index];
+  }
+  
+  function generateMockChannelItem(start, end) {
+    var duration
+      , eventStart
+      , eventDuration
+      , eventEnd;
+    
+    eventStart = getRandomInt(start.getTime(), end.getTime());
+    eventDuration = getRandomInt(10000, end - eventStart);
+    eventEnd = new Date(eventStart.getTime() + eventDuration);
+    
+    return {
+      start: eventStart
+      , duration: eventDuration
+      , end: eventEnd
+    };
+  }
+  
+  function incrementTime(eventStart, duration) {
+    
+  }
+  
+  function generateMockData(channelType, start, end) {
+    var channelEvents = []
+      , prevEndTime
+      , event;
+    
+    prevEndTime = start;
+    while (prevEndTime < end) {
+      event = generateMockChannelItem(prevEndTime, end);
+      
+      // Mutate event type based based on provided type
+      if (channelType === 'audio') {
+        event = mutateToAudio(event);
+      } else if (channelType === 'screencap') {
+        event = mutateToScreenCapture(event);
+      } else if (channelType === 'location') {
+        event = mutateToLocation(event);
+      }
+    
+      channelEvents.push(event);
+      prevEndTime = incrementTime(event.start, event.duration);
+    }
+    
+    return channelEvents;
+  }
+  
+  function mutateToAudio(channelItem) {
+    channelItem.filename = '/path/to/audio.mp3';
+    return channelItem;
+  }
+  
+  function mutateToScreenCapture(channelItem) {
+    channelItem.filename = '/path/to/screenCap.png';
+    delete channelItem.duration;
+    delete channelItem.end;
+    
+    return channelItem;
+  }
+  
+  function mutateToLocation(channelItem) {
+    channelItem.location = {
+      label: getRandomChoice(['Tom\'s Hardware', 'Warehouse', '128 Show St Lismore', 'Home'])
+      , latitude: -27.4073899
+      , longitude: 153.0028595
+    };
+    return channelItem;
+  }
+  
+  return contentService;
 });

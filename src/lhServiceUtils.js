@@ -2,11 +2,11 @@
 
 var serviceUtils = angular.module('lh.service.utils', []);
 
-serviceUtils.service("serviceUtils", function() {
+serviceUtils.service('serviceUtils', function() {
 
   // Reprioritises the priority list around the new priority value
   function reprioritise(priorityList, newPriority, oldPriority, priorityProp) {
-    var delta, el, i; 
+    var delta, el, i;
     
     delta = newPriority - oldPriority;
       
@@ -52,7 +52,7 @@ serviceUtils.service("serviceUtils", function() {
       
       priorityList = priorityList.sort(function(a, b) {
         return a[priorityProp] - b[priorityProp];
-      })
+      });
       
       return priorityList;
     }
