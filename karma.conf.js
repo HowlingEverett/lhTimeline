@@ -14,15 +14,18 @@ module.exports = function(config) {
     files: [
       'bower_components/angular/angular.js',
       'bower_components/angular-mocks/angular-mocks.js',
-      'src/*.js',
-      'src/**/*.js',
+      'bower_components/jquery/dist/jquery.js',
+      'lhTimeline.js',
+      'lhServiceUtils.js',
       // 'test/mock/**/*.js',
       'test/mockTimelineService.js',
-      'test/spec/**/*.js'
+      'test/spec/**/*.js',
+      'views/*.html'
     ],
 
     preprocessors: {
-      'src/*.js': ['coverage']
+      'lh*.js': ['coverage'],
+      'views/*.html': ['ng-html2js']
     },
 
     coverageReporter: {
@@ -62,7 +65,7 @@ module.exports = function(config) {
     // - Safari (only Mac)
     // - PhantomJS
     // - IE (only Windows)
-    browsers: ['Chrome', 'Safari', 'Firefox'],
+    browsers: ['Chrome', 'Firefox'],
 
 
     // Continuous Integration mode
