@@ -8,6 +8,7 @@ var lhTimeline = angular.module('lh.timeline', ['lh.service.utils']);
 lhTimeline.directive('lhTimelineViewport', function() {
   return {
     restrict: 'E'
+  , replace: true
   , templateUrl: 'views/timeline.html'
   , transclude: true
   };

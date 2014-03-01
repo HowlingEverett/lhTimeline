@@ -16,9 +16,10 @@ describe('lhTimeline directive', function() {
     it('should render the basic timeline viewport', function() {
       var tmpl
         , heading
-        , container
         , prevTitle;
 
+      // Our directive should render a timeline title based on the title in
+      // its scope.
       scope.title = 'Test Timeline';
       tmpl = $compile('<lh-timeline-viewport></lh-timeline-viewport>')(scope);
       scope.$digest();
@@ -33,8 +34,9 @@ describe('lhTimeline directive', function() {
       expect(heading.eq(0).text()).toBe(scope.title);
       expect(heading.eq(0).text()).not.toBe(prevTitle);
 
-      container = $(tmpl).find('div.timeline');
-      expect(container.length).toBe(1);
+      // The directive should replace itself with a div.timeline
+      expect($(tmpl).prop('tagName')).toBe('DIV');
+      expect($(tmpl).hasClass('timeline')).toBe(true);
     });
 
     it('should render sub-sections for each timeline channel', function() {
