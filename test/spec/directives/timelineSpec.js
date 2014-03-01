@@ -35,7 +35,7 @@ describe('lhTimeline directive', function() {
       expect(heading.eq(0).text()).not.toBe(prevTitle);
 
       // The directive should replace itself with a div.timeline
-      expect($(tmpl).prop('tagName')).toBe('DIV');
+      expect($(tmpl).prop('tagName').toLowerCase()).toBe('div');
       expect($(tmpl).hasClass('timeline')).toBe(true);
     });
 
