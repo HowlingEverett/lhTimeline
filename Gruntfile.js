@@ -35,10 +35,11 @@ module.exports = function (grunt) {
 
       test: {
         options: {
-          port: 9011,
           base: [
             '.tmp',
             'test',
+            'src',
+            '',
             '<%= paths.demo %>'
           ]
         }
@@ -98,7 +99,7 @@ module.exports = function (grunt) {
   grunt.registerTask('demo', function() {
     grunt.task.run([
       'bowerInstall',
-      'connect:livereload',
+      'connect',
       'open:dev',
       'watch'
     ]);
