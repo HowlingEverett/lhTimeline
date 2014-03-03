@@ -2,34 +2,31 @@
 
 var lhTimeline = angular.module('lh.timeline', ['lh.service.utils']);
 
-/**
-
-**/
 lhTimeline.directive('lhTimelineViewport', function() {
   return {
     restrict: 'E'
   , replace: true
   , templateUrl: 'views/timeline.html'
   , transclude: true
+  , priority: 1
+  , link: function(scope, iElement) {
+      iElement.on('scroll', function() {
+        scope.$broadcast('viewportScrolled');
+      });
+    }
   };
-});
-
-lhTimeline.directive('lhTimelineChannel', function() {
+}).directive('lhTimelineChannel', function() {
   return {
     restrict: 'E'
+  , transclude: true
   , templateUrl: 'views/timeline_channel.html'
   }
-});
-
-lhTimeline.directive('lhTimeline', function ($injector) {
+}).directive('lhTimelineRepeat', function ($injector) {
   return {
     restrict: 'A'
-  , require: ['?^lhTimelineViewport']
-  , transclude: 'element'
   , priority: 1000
-  , terminal: true
-  , compile: function(tElement, tAttrs) {
-      return function(scope, iElement, iAttrs, controller, transcludeFn) {
+  , compile: function() {
+      return function(scope, iElement, iAttrs, timelineController, linker) {
         var match
           , itemName
           , datasourceName
@@ -38,7 +35,7 @@ lhTimeline.directive('lhTimeline', function ($injector) {
 
         match = iAttrs.lhTimeline.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
         if (!match) {
-          throw new Error('Expected lhTimeline directive in the form of "item in datasource" but got"' +
+          throw new Error('Expected lhTimeline directive in the form of "item in datasource" but got "' +
             iAttrs.lhTimeline + '"');
         }
         itemName = match[1];
@@ -60,9 +57,18 @@ lhTimeline.directive('lhTimeline', function ($injector) {
         }
 
         // The transcluder's linker function call
-        transcludeFn(tempScope = scope.new(), function(tempate) {
+        linker(tempScope = scope.new(), function(template) {
+          var repeaterType;
 
+          repeaterType = template.prop('localName');
         });
+
+        function scrollHandler() {
+
+        }
+        scope.on('viewportScrolled', scrollHandler);
+
+
       }
     }
   };
