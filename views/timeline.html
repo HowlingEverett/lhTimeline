@@ -1,9 +1,5 @@
 <div class="timeline">
-    <h2 class="timeline_title">{{title}}</h2>
+    <span class="timeline_title">{{title}}</span>
 
-    <ul class="timeline_channels">
-        <li ng-repeat="channel in channels">
-            <lh-timeline-channel ng-model="channel"></lh-timeline-channel>
-        </li>
-    </ul>
+    <div class="timeline_viewport" ng-transclude></div>
 </div>

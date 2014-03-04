@@ -1,8 +1,6 @@
 <div class="timeline_channel">
     <span class="glyphicon glyphicon-{{channel.glyphicon}}"></span>
-    <h4>{{channel.title}}</h4>
+    <span class="channel_title">{{channel.title}}</span>
 
-    <ul class="timeline_channel_content">
-        <li content-type="channel.type" lh-timeline-repeat="item in contentType"></li>
-    </ul>
+    <div class="timeline_channel_content" ng-transclude />
 </div>
