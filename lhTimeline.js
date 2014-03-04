@@ -10,7 +10,16 @@ lhTimeline.directive('lhTimelineViewport', function() {
   , transclude: true
   , priority: 1
   , link: function(scope, iElement) {
-      iElement.on('scroll', function() {
+      var scrollPort;
+
+      angular.forEach(iElement.find('div'), function(div) {
+        if (div.classList.contains('timeline_viewport')) {
+          scrollPort = angular.element(div);
+        }
+      });
+      scrollPort.css({overflow: 'scroll'});
+
+      scrollPort.on('scroll', function() {
         scope.$broadcast('viewportScrolled');
       });
     }
@@ -26,9 +35,6 @@ lhTimeline.directive('lhTimelineViewport', function() {
     restrict: 'A'
   , priority: 1000
   , transclude: 'element'
-  , scope: {
-      contentType: '='
-    }
   , compile: function() {
       return function(scope, iElement, iAttrs, timelineController, linker) {
         var match
@@ -39,26 +45,26 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
         match = iAttrs.lhTimelineRepeat.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
         if (!match) {
-          throw new Error('Expected lhTimeline directive in the form of "item in datasource" but got "' +
+          throw new Error('Expected lhTimeline directive in the form of "item in timelineService" but got "' +
             iAttrs.lhTimeline + '"');
         }
         itemName = match[1];
         datasourceName = match[2];
 
-//        function isDatasource(datasource) {
-//          return angular.isObject(datasource) &&
-//            datasource.get &&
-//            angular.isFunction(datasource.get);
-//        }
-//
-//        datasource = scope[datasourceName];
-//
-//        if (!isDatasource(datasource)) {
-//          datasource = $injector.get(datasourceName);
-//          if (!isDatasource(datasource)) {
-//            throw new Error(datasourceName + ' is not a valid datasource for the timeline');
-//          }
-//        }
+        function isDatasource(datasource) {
+          return angular.isObject(datasource) &&
+            datasource.get &&
+            angular.isFunction(datasource.get);
+        }
+
+        datasource = scope[datasourceName];
+
+        if (!isDatasource(datasource)) {
+          datasource = $injector.get(datasourceName);
+          if (!isDatasource(datasource)) {
+            throw new Error(datasourceName + ' is not a valid datasource for the timeline');
+          }
+        }
 
         // The transcluder's linker function call
         linker(tempScope = scope.$new(), function(template) {
