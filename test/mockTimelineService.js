@@ -12,32 +12,28 @@ lhTimeline.service('MockTimeline', function($rootScope, serviceUtils) {
       , {_id: 'channelId3', title: 'Locations', priority: 2, visible: true
         , icon: '/images/icons/location.png', glyphicon: 'screenshot', color: '#F0AD4E'}
     ]
-  };
-  
-  channelService.prototype.channelById = function(channelId) {
-    var channel = _.find(this.channels, function(channel) {
-      return channel._id === channelId;
-    });
-    
-    return channel;
-  };
-  
-  channelService.prototype.setVisible = function(channelId, visible) {
-    var channel = this.channelById(channelId);
-    if (channel) {
-      channel.visible = visible;
+
+  , channelById: function(channelId) {
+      return _.find(this.channels, function(ch) {
+        return ch._id === channelId;
+      });
     }
-  };
-  
-  channelService.prototype.setPriority = function(channelId, newPriority) {
-    var channel, channels;
-    
-    channel = this.channelById(channelId);
-    if (!channel) {
-      return;
+  , setVisible: function(channelId, visible) {
+      var channel = this.channelById(channelId);
+      if (channel) {
+        channel.visible = visible;
+      }
     }
-    
-    this.channels = serviceUtils.changePriority(this.channels, channel, newPriority);
+  , setPriority: function(channelId, newPriority) {
+      var channel;
+
+      channel = this.channelById(channelId);
+      if (!channel) {
+        return;
+      }
+
+      this.channels = serviceUtils.changePriority(this.channels, channel, newPriority);
+    }
   };
   
   return channelService;
@@ -52,8 +48,7 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
   
   contentService = {
     channels: function(start, end) {
-      var key
-        , audioContent
+      var audioContent
         , screenCapContent
         , locationContent;
       
@@ -68,8 +63,8 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
       
       return {
         channelId1: audioContent
-        , channelId2: screenCapContent
-        , channelId3: locationContent
+      , channelId2: screenCapContent
+      , channelId3: locationContent
       };
     }
   };
@@ -77,17 +72,17 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
   contentService.prototype.get = function(start, end, success) {
     $timeout(function() {
       success(this.channels(start, end));
-    }, 100)
+    }, 100);
   };
   
   current = 0;
   $rootScope.refresh = function() {
     current += 1;
-  }
+  };
   
   $rootScope.insert = function() {
     scope.$broadcast('insert.channelItem');
-  }
+  };
 /*
   contentService.prototype.loading = function(value) {
     
@@ -114,8 +109,7 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
   }
   
   function generateMockChannelItem(start, end) {
-    var duration
-      , eventStart
+    var eventStart
       , eventDuration
       , eventEnd;
     
@@ -125,13 +119,13 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
     
     return {
       start: eventStart
-      , duration: eventDuration
-      , end: eventEnd
+    , duration: eventDuration
+    , end: eventEnd
     };
   }
   
   function incrementTime(eventStart, duration) {
-    
+    return new Date(eventStart.getTime() + duration + 10000);
   }
   
   function generateMockData(channelType, start, end) {
@@ -175,8 +169,8 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
   function mutateToLocation(channelItem) {
     channelItem.location = {
       label: getRandomChoice(['Tom\'s Hardware', 'Warehouse', '128 Show St Lismore', 'Home'])
-      , latitude: -27.4073899
-      , longitude: 153.0028595
+    , latitude: -27.4073899
+    , longitude: 153.0028595
     };
     return channelItem;
   }
