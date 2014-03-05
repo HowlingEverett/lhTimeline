@@ -6,13 +6,113 @@ angular.module('lh.mocks', []).service('timelineService', function() {
   };
 });
 
-describe('lhTimeline directive', function() {
+
+
+describe('lhTimeline module', function() {
   var $compile
     , scope;
 
   beforeEach(module('lh.timeline'));
   beforeEach(module('lh.mocks'));
   beforeEach(module('views/timeline.html', 'views/timeline_channel.html'));
+
+  describe('durationToPixels filter', function() {
+    var durationToPixels;
+
+    beforeEach(inject(function($injector) {
+      durationToPixels = $injector.get('durationToPixelsFilter');
+    }));
+
+    it('should expect three or four arguments', function() {
+      expect(function() {
+        durationToPixels();
+      }).toThrow();
+
+      expect(function() {
+        durationToPixels(300, 1234, 123);
+        durationToPixels(300, 1234, 123, 1234);
+      }).not.toThrow();
+    });
+
+    it('should expect container width with a parseable format', function() {
+      expect(function() {
+        durationToPixels(300, 1, 1);
+        durationToPixels('300px', 1, 1);
+        durationToPixels('30%', 1, 1);
+        durationToPixels('5em', 1, 1);
+        durationToPixels('12.8rem', 1, 1);
+      }).not.toThrow();
+
+      expect(function() {
+        durationToPixels('50crap', 1, 1);
+      }).toThrow();
+
+      expect(function() {
+        durationToPixels('bollocks', 1, 1);
+      }).toThrow();
+    });
+
+    it('should expect total duration and element duration as numbers', function() {
+      expect(function() {
+        durationToPixels('3000px', 1, 1);
+      }).not.toThrow();
+
+      expect(function() {
+        durationToPixels('300', 'dog', 1);
+      }).toThrow();
+
+      expect(function() {
+        durationToPixels('300', 1, 'no');
+      }).toThrow();
+    });
+
+    it('should return a width for an element scaled to the timeline viewport', function() {
+      var viewportWidth = 1000
+        , timelineDuration = 600000 // 10 minutes
+        , elementDuration = 60000   // 1 minute
+        , elementWidth;
+
+      elementWidth = durationToPixels(viewportWidth, timelineDuration, elementDuration);
+      expect(elementWidth).toEqual(100);
+    });
+
+    it('should return pixel values floored to the closest whole pixel', function() {
+      var viewportWidth = 1111
+        , timelineDuration = 600000 // 10 minutes
+        , elementDuration = 60000   // 1 minute
+        , elementWidth;
+
+      elementWidth = durationToPixels(viewportWidth, timelineDuration, elementDuration);
+      expect(elementWidth).toEqual(111);
+
+      viewportWidth = '1111px';
+      elementWidth = durationToPixels(viewportWidth, timelineDuration, elementDuration);
+      expect(elementWidth).toEqual('111px');
+    });
+
+    it('should not floor rem, em, or % values', function() {
+      var viewportWidth = '18.5rem'
+        , timelineDuration = 600000 // 10 minutes
+        , elementDuration = 60000   // 1 minute
+        , elementWidth;
+
+      elementWidth = durationToPixels(viewportWidth, timelineDuration, elementDuration);
+      expect(elementWidth).toEqual('1.85rem');
+
+      viewportWidth = '93%';
+      elementWidth = durationToPixels(viewportWidth, timelineDuration, elementDuration);
+      expect(elementWidth).toEqual('9.3%');
+    });
+
+    it('should return an element width in the same unit as the viewport width', function() {
+      expect(Number(durationToPixels(100, 1, 1))).toBeTruthy();
+      expect(durationToPixels('100px', 1, 1).match(/px/)).toBeTruthy();
+      expect(durationToPixels('30%', 1, 1).match(/%/)).toBeTruthy();
+      expect(durationToPixels('100pt', 1, 1).match(/pt/)).toBeTruthy();
+      expect(durationToPixels('10.0em', 1, 1).match(/em/)).toBeTruthy();
+      expect(durationToPixels('10.0rem', 1, 1).match(/rem/)).toBeTruthy();
+    });
+  });
 
   beforeEach(inject(function(_$compile_, $rootScope) {
     $compile = _$compile_;
@@ -121,12 +221,12 @@ describe('lhTimeline directive', function() {
 
     it('Should expect a parameter in the form \'thing in thingService\'', function() {
       expect(function() {
-        $compile('<div lh-timeline-repeat="bad parameter"></div>')(scope);
+        $compile('<lh-timeline-viewport><div lh-timeline-repeat="bad parameter"></div></lh-timeline-viewport>')(scope);
         scope.$digest();
       }).toThrow();
 
       expect(function() {
-        $compile('<div lh-timeline-repeat="item in items"></div>')(scope);
+        $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in items"></div></lh-timeline-viewport>')(scope);
         scope.$digest();
       }).not.toThrow();
     });
@@ -135,23 +235,29 @@ describe('lhTimeline directive', function() {
       // Mock timeline service on the scope
       expect(function() {
         scope.timelineService = { get: function() {} };
-        $compile('<div lh-timeline-repeat="item in timelineService"></div>')(scope);
+        $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in timelineService"></div></lh-timeline-viewport>')(scope);
         scope.$digest();
       }).not.toThrow();
     });
 
     it('Should accept a service locatable by the injector', function() {
       expect(function() {
-        $compile('<div lh-timeline-repeat="item in timelineService"></div>')(scope);
+        $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in timelineService"></div></lh-timeline-viewport>')(scope);
         scope.$digest();
       }).not.toThrow();
     });
 
     it('Should expect either a service or a scope object with a `get` function', function() {
       expect(function() {
-        $compile('<div lh-timeline-repeat="item in nonExistentService"></div>')(scope);
+        $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in nonExistentService"></div></lh-timeline-viewport>')(scope);
         scope.$digest();
       }).toThrow();
+    });
+
+    it('Should expect the service to supply start and end times', function() {
+      inject(function(MockTimeline, MockChannel) {
+
+      });
     });
   });
 });

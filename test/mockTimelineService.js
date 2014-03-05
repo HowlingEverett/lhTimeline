@@ -44,7 +44,7 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
     , current
     , scope;
   
-  scope = $rootScope.new();
+  scope = $rootScope.$new();
   
   contentService = {
     channels: function(start, end) {
@@ -69,7 +69,7 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
     }
   };
   
-  contentService.prototype.get = function(start, end, success) {
+  contentService.get = function(start, end, success) {
     $timeout(function() {
       success(this.channels(start, end));
     }, 100);
@@ -89,7 +89,7 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
   };
 */
   
-  contentService.prototype.revision = function() {
+  contentService.revision = function() {
     return current;
   };
   
