@@ -181,27 +181,10 @@ describe('lhTimeline module', function() {
       expect(tmpl.hasClass('timeline')).toBe(true);
     });
 
-//    it('should render sub-sections for each timeline channel', function() {
-//      var channels;
-//
-//      channels = $(tmpl).find('div.timeline_channel');
-//      expect(channels.length).toBe(3);
-//    });
-//
-//    it('should pass channel data down to its contained channel directives', function() {
-//      var channel;
-//
-//      // Grab what should be the first of three channels rendered using the lhTimelineChannel
-//      // directive
-//      channel = $(tmpl).find('div.timeline_channel h4').eq(0);
-//      // Confirm it gets a title from the relevant channels object on the scope
-//      expect(channel.text()).toEqual(scope.channels[0].title);
-//    });
-
     it('should broadcast a scope event when the user scrolls the viewport', function() {
       var content, viewport;
       spyOn(scope, '$broadcast');
-      expect(scope.$broadcast).not.toHaveBeenCalledWith('viewportScrolled');
+      expect(scope.$broadcast).not.toHaveBeenCalledWith('timelineScrolled');
 
       content = tmpl.find('.timeline_channels');
       viewport = tmpl.find('.timeline_viewport');
@@ -209,7 +192,63 @@ describe('lhTimeline module', function() {
       viewport.css('width', '200px');
       viewport.scrollLeft(800);
       viewport.triggerHandler('scroll');
-      expect(scope.$broadcast).toHaveBeenCalledWith('viewportScrolled');
+      expect(scope.$broadcast).toHaveBeenCalledWith('timelineScrolled', 0, 0);
+    });
+  });
+
+  describe('TimelineController', function() {
+    var $scope;
+
+    beforeEach(inject(function($rootScope, $controller) {
+      $scope = $rootScope.$new();
+      $controller('TimelineController', {$scope: $scope});
+    }));
+
+    it('should add start and end Dates to the scope', function() {
+      expect($scope.start() instanceof Date).toBeTruthy();
+      expect($scope.end() instanceof Date).toBeTruthy();
+    });
+
+    it('should have a method for setting start and end dates', function() {
+      var start = new Date(2014, 2, 5, 9)
+        , end = new Date(2014, 2, 5, 9, 15);
+
+      expect($scope.start()).not.toEqual(start);
+      expect($scope.end()).not.toEqual(end);
+
+      $scope.setTimelineBounds(start, end);
+      expect($scope.start()).toEqual(start);
+      expect($scope.end()).toEqual(end);
+    });
+
+    it('should expect Date objects for the start and end dates', function() {
+      expect(function() {
+        $scope.setTimelineBounds(1, 'no');
+      }).toThrow();
+    });
+
+    it('should not allow the start to be the same or later than end', function() {
+      expect(function() {
+        var start = new Date(2014, 2, 5, 9, 15)
+          , end = new Date(2014, 2, 5, 9);
+        $scope.setTimelineBounds(start, end);
+      }).toThrow();
+
+      expect(function() {
+        var start = new Date(2014, 2, 5, 9)
+          , end = new Date(2014, 2, 5, 9);
+        $scope.setTimelineBounds(start, end);
+      }).toThrow();
+    });
+
+    it('should calculate the duration of the visible timeline', function() {
+      var start = new Date(2014, 2, 5, 9)
+        , end = new Date(2014, 2, 5, 9, 15)
+        , duration;
+
+      $scope.setTimelineBounds(start, end);
+      duration = $scope.getDuration();
+      expect(duration).toEqual(900000);
     });
   });
 
@@ -252,12 +291,6 @@ describe('lhTimeline module', function() {
         $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in nonExistentService"></div></lh-timeline-viewport>')(scope);
         scope.$digest();
       }).toThrow();
-    });
-
-    it('Should expect the service to supply start and end times', function() {
-      inject(function(MockTimeline, MockChannel) {
-
-      });
     });
   });
 });

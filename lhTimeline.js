@@ -40,6 +40,45 @@ lhTimeline.filter('durationToPixels', function() {
   }
 });
 
+lhTimeline.controller('TimelineController', function($scope) {
+  var start
+    , end;
+
+  end = $scope.end || new Date(); // Defaults to 'now' if not set
+  start = $scope.start || new Date(end.getTime() - 600000); // Defaults to 10min ago
+
+  $scope.bufferMinutes = function() {
+    return $scope.bufferMinutes || 5;
+  };
+
+  $scope.getDuration = function() {
+    return end - start;
+  };
+
+  $scope.start = function() {
+    return start;
+  };
+
+  $scope.end = function() {
+    return end;
+  };
+
+  $scope.setTimelineBounds = function(startTime, endTime) {
+    if (!(startTime instanceof Date) || !(endTime instanceof Date)) {
+      throw new Error('Start and End must be Date instances');
+    }
+
+    if (startTime >= endTime) {
+      throw new Error('End time must be greater than the start.');
+    }
+
+    start = startTime;
+    end = endTime;
+  };
+
+  return $scope;
+});
+
 lhTimeline.directive('lhTimelineViewport', function() {
   return {
     restrict: 'E'
@@ -47,45 +86,45 @@ lhTimeline.directive('lhTimelineViewport', function() {
   , templateUrl: 'views/timeline.html'
   , transclude: true
   , priority: 1
-  , link: function($scope, $element) {
-      var scrollPort;
-
-      function setupDomListeners() {
-        angular.forEach($element.find('div'), function(div) {
-          if (div.classList.contains('timeline_viewport')) {
-            scrollPort = angular.element(div);
-          }
-        });
-        scrollPort.css({overflow: 'scroll'});
-
-        scrollPort.on('scroll', function() {
-          $scope.$broadcast('viewportScrolled');
-        });
-      }
-
-      setupDomListeners();
-
-      return $scope;
-    }
+  , controller: 'TimelineController'
   };
+}).directive('lhTimelineScrollView', function() {
+  return {
+    restrict: 'A'
+  , link: function(scope, $element) {
+      $element.css({overflow: 'scroll', display: 'block'});
+      $element.on('scroll', function() {
+        scope.$broadcast('timelineScrolled', $element.prop('scrollLeft'), $element.prop('scrollTop'));
+      });
+      $element.on('resize', function() {
+        scope.$broadcast('timelineResized', $element.prop('width'), $element.prop('height'));
+      });
+    }
+  }
 }).directive('lhTimelineChannel', function() {
   return {
     restrict: 'E'
   , transclude: true
   , templateUrl: 'views/timeline_channel.html'
   }
-}).directive('lhTimelineRepeat', function ($injector) {
+}).directive('lhTimelineRepeat', function($injector, $window, durationToPixelsFilter) {
   return {
     restrict: 'A'
   , priority: 1000
   , transclude: 'element'
+  , require: '?^lhTimelineViewport'
   , compile: function() {
       return function(scope, iElement, iAttrs, timelineController, linker) {
         var match
           , itemName
           , datasourceName
           , datasource
-          , tempScope;
+          , tempScope
+          , bufferMinutes
+          , bufferPadding
+          , adapter
+          , viewport
+          , durationToPixels = durationToPixelsFilter;
 
         match = iAttrs.lhTimelineRepeat.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
         if (!match) {
@@ -110,19 +149,35 @@ lhTimeline.directive('lhTimelineViewport', function() {
           }
         }
 
+        // User can set the buffer size as a variable on the container
+        bufferMinutes = Math.max(timelineController.bufferMinutes() || 0, 5);
+        bufferPadding = function() {
+
+        };
+
+        function scrollWidth(elem) {
+          return elem[0].scrollWidth || elem[0].document.documentElement.scrollWidth;
+        }
+        adapter = null;
+
         // The transcluder's linker function call
         linker(tempScope = scope.$new(), function(template) {
           var repeaterType;
 
           repeaterType = template.prop('localName');
+
         });
 
-        function scrollHandler() {
+        function scrollHandler(event) {
 
         }
+
+        function resizeHandler(event) {
+
+        }
+
         scope.$on('viewportScrolled', scrollHandler);
-
-
+        scope.$on('viewportResized', resizeHandler);
       }
     }
   };

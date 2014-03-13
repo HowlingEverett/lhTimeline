@@ -18,7 +18,7 @@ module.exports = function(config) {
       'lhTimeline.js',
       'lhServiceUtils.js',
       // 'test/mock/**/*.js',
-      'test/mockTimelineService.js',
+      'test/mockTimelineRepeatService.js',
       'test/spec/**/*.js',
       'views/*.html'
     ],
