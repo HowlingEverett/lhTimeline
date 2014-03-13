@@ -149,6 +149,7 @@ describe('lhTimeline module', function() {
 
     beforeEach(function() {
       scope.title = 'Test timeline';
+
       tmpl = $compile('<lh-timeline-viewport><div class="timeline_channels"></div></lh-timeline-viewport>')(scope);
       scope.$digest();
     });
