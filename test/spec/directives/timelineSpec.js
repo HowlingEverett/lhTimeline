@@ -149,12 +149,6 @@ describe('lhTimeline module', function() {
 
     beforeEach(function() {
       scope.title = 'Test timeline';
-      scope.channels = [
-        {title:'Channel 1', type: 'audio'}
-        , {title: 'Channel 2', type: 'location'}
-        , {title: 'Channel 3', type: 'photo'}
-      ];
-
       tmpl = $compile('<lh-timeline-viewport><div class="timeline_channels"></div></lh-timeline-viewport>')(scope);
       scope.$digest();
     });
@@ -196,20 +190,66 @@ describe('lhTimeline module', function() {
     });
   });
 
+  describe('lhTimelineScrollView directive', function() {
+    var $compile
+      , $scope
+      , viewport
+      , scrollView;
+
+    beforeEach(inject(function(_$compile_, $rootScope) {
+      $compile = _$compile_;
+      $scope = $rootScope.$new();
+      $scope.title = 'test timeline';
+      viewport = $compile('<lh-timeline-viewport><div class="content">Test</div></lh-timeline-viewport>')($scope);
+      $scope.$digest();
+      viewport.css({width: '800px'});
+      viewport.trigger('resize');
+      scrollView = viewport.find('div.timeline_viewport');
+    }));
+
+    it('should be sized larger than the viewport based on the buffer', function() {
+      var viewportWidth
+        , scrollViewWidth;
+
+      viewportWidth = viewport.width();
+      scrollViewWidth = scrollView.width();
+      expect(scrollViewWidth).toBeGreaterThan(viewportWidth);
+      // Default buffer is 5 minutes either side, so we end up with
+      // double the width in this default case.
+      expect(scrollViewWidth).toEqual(1600);
+
+      viewport = $compile('<lh-timeline-viewport buffer-minutes="2">Test 2</lh-timeline-viewport>')($scope);
+      $scope.$digest();
+      scrollView = viewport.find('div.timeline_viewport');
+      viewport.css({width: '800px'});
+      viewport.trigger('resize');
+      expect(scrollView.width()).toEqual(1120);
+    });
+
+    it('should resize itself when the viewport resizes', function() {
+      // Starting size
+      expect(scrollView.width()).toEqual(1600);
+
+      viewport.css({width: '1200px'});
+      viewport.trigger('resize');
+      expect(scrollView.width()).toEqual(2400);
+    });
+  });
+
   describe('TimelineController', function() {
     var $scope;
 
     beforeEach(inject(function($rootScope, $controller) {
       $scope = $rootScope.$new();
-      $controller('TimelineController', {$scope: $scope});
+      $controller('TimelineController', {$scope: $scope, $attrs: {}});
     }));
 
-    it('should add start and end Dates to the scope', function() {
+    it('should add getStart and end Dates to the scope', function() {
       expect($scope.start() instanceof Date).toBeTruthy();
       expect($scope.end() instanceof Date).toBeTruthy();
     });
 
-    it('should have a method for setting start and end dates', function() {
+    it('should have a method for setting getStart and end dates', function() {
       var start = new Date(2014, 2, 5, 9)
         , end = new Date(2014, 2, 5, 9, 15);
 
@@ -221,13 +261,13 @@ describe('lhTimeline module', function() {
       expect($scope.end()).toEqual(end);
     });
 
-    it('should expect Date objects for the start and end dates', function() {
+    it('should expect Date objects for the getStart and end dates', function() {
       expect(function() {
         $scope.setTimelineBounds(1, 'no');
       }).toThrow();
     });
 
-    it('should not allow the start to be the same or later than end', function() {
+    it('should not allow the getStart to be the same or later than end', function() {
       expect(function() {
         var start = new Date(2014, 2, 5, 9, 15)
           , end = new Date(2014, 2, 5, 9);
@@ -247,7 +287,7 @@ describe('lhTimeline module', function() {
         , duration;
 
       $scope.setTimelineBounds(start, end);
-      duration = $scope.getDuration();
+      duration = $scope.duration();
       expect(duration).toEqual(900000);
     });
   });
