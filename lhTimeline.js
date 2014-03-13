@@ -40,26 +40,30 @@ lhTimeline.filter('durationToPixels', function() {
   }
 });
 
-lhTimeline.controller('TimelineController', function($scope) {
+lhTimeline.controller('TimelineController', function($scope, $attrs) {
   var start
     , end;
 
-  end = $scope.end || new Date(); // Defaults to 'now' if not set
-  start = $scope.start || new Date(end.getTime() - 600000); // Defaults to 10min ago
+  end = $attrs.end || new Date(); // Defaults to 'now' if not set
+  start = $attrs.start || new Date(end.getTime() - 600000); // Defaults to 10min ago
 
-  $scope.bufferMinutes = function() {
-    return $scope.bufferMinutes || 5;
+  $scope.buffer = function() {
+    var bufferMinutes;
+    bufferMinutes = +$attrs.bufferMinutes || 5;
+    return bufferMinutes * 60000 * 2; // Buffer is bufferMinutes in milliseconds
+                                      // doubled, since the buffer should apply either
+                                      // side
   };
 
-  $scope.getDuration = function() {
+  $scope.duration = function() {
     return end - start;
   };
 
-  $scope.start = function() {
+  $scope.start = function () {
     return start;
   };
 
-  $scope.end = function() {
+  $scope.end = function () {
     return end;
   };
 
@@ -88,16 +92,33 @@ lhTimeline.directive('lhTimelineViewport', function() {
   , priority: 1
   , controller: 'TimelineController'
   };
-}).directive('lhTimelineScrollView', function() {
+}).directive('lhTimelineScrollView', function($filter) {
   return {
     restrict: 'A'
-  , link: function(scope, $element) {
+  , require: '^lhTimelineViewport'
+  , link: function($scope, $element, $attrs, timelineController) {
+
+      function scrollViewBufferedSize() {
+        var durationToPixels
+          , visibleDuration
+          , viewportWidth
+          , scrollViewWidth;
+
+        durationToPixels = $filter('durationToPixels');
+        visibleDuration = timelineController.duration();
+        viewportWidth = $element.parent().css('width');
+        scrollViewWidth = durationToPixels(viewportWidth
+          , visibleDuration, visibleDuration + timelineController.buffer());
+        return scrollViewWidth;
+      }
+
       $element.css({overflow: 'scroll', display: 'block'});
       $element.on('scroll', function() {
-        scope.$broadcast('timelineScrolled', $element.prop('scrollLeft'), $element.prop('scrollTop'));
+        $scope.$broadcast('timelineScrolled', $element.prop('scrollLeft'), $element.prop('scrollTop'));
       });
-      $element.on('resize', function() {
-        scope.$broadcast('timelineResized', $element.prop('width'), $element.prop('height'));
+      $element.parent().on('resize', function() {
+        $element.css('width', scrollViewBufferedSize());
+        $scope.$broadcast('timelineResized', $element.prop('width'), $element.prop('height'));
       });
     }
   }
@@ -120,7 +141,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
           , datasourceName
           , datasource
           , tempScope
-          , bufferMinutes
+          , buffer
           , bufferPadding
           , adapter
           , viewport
@@ -150,7 +171,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
         }
 
         // User can set the buffer size as a variable on the container
-        bufferMinutes = Math.max(timelineController.bufferMinutes() || 0, 5);
+        buffer = Math.max(timelineController.buffer() || 0, 5);
         bufferPadding = function() {
 
         };
