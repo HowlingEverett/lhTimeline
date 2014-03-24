@@ -13,6 +13,8 @@ module.exports = function (grunt) {
     watch: {
       js: {
         files: [
+          'lhTimeline.js',
+          'lhServiceUtils.js',
           '<%= paths.demo %>/{,*/}*.js'
         ],
         tasks: ['newer:jshint:all']
@@ -21,7 +23,9 @@ module.exports = function (grunt) {
         files: [
           '<%= paths.demo %>/{,*/}*.js',
           'test/*.js',
-          'test/spec/{,*/}*.js'
+          'test/spec/{,*/}*.js',
+          'lhTimeline.js',
+          'lhServiceUtils.js'
         ],
         tasks: ['newer:jshint:test', 'karma:unit']
       }
@@ -96,7 +100,7 @@ module.exports = function (grunt) {
     }
   });
 
-  grunt.registerTask('demo', function() {
+  grunt.registerTask('serve', function() {
     grunt.task.run([
       'bowerInstall',
       'connect',

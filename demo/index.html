@@ -1,19 +1,28 @@
 <!DOCTYPE html>
-<html>
-<head lang="en" ng-app="lh.timeline">
+<html ng-app="lhTimelineDemo">
+<head lang="en">
     <meta charset="UTF-8">
     <title>lhTimeline Demo Page</title>
+    <link href="demo.css" type="text/css" rel="stylesheet">
 </head>
-<body>
+<body ng-controller="lhTimelineDemoController">
 
-<!-- bower:js -->
-<script src="bower_components/angular/angular.js"></script>
-<!-- endbower -->
-<script src="lhServiceUtils.js"></script>
-<script src="lh-timeline.js"></script>
+    <lh-timeline-viewport>
+        <lh-timeline-channel>
+            <div class="timeline_content" lh-timeline-repeat="item in MockChannel">
+                {{start}}
+            </div>
+        </lh-timeline-channel>
+    </lh-timeline-viewport>
 
-<div lh-timeline-viewport=""></div>
-
+    <!-- bower:js -->
+    <script src="bower_components/jquery/dist/jquery.js"></script>
+    <script src="bower_components/angular/angular.js"></script>
+    <!-- endbower -->
+    <script src="../lhServiceUtils.js"></script>
+    <script src="../lhTimeline.js"></script>
+    <script src="../mockTimelineRepeatService.js"></script>
+    <script src="demo.js"></script>
 
 </body>
 </html>

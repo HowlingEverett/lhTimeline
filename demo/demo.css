@@ -1,0 +1,13 @@
+.timeline {
+    width: 90%;
+    margin: 0 auto;
+}
+
+.timeline_channel_content {
+    height: 24px;
+}
+
+.timeline_content {
+    display: inline-block;
+    margin-left: 24px;
+}

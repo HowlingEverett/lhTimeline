@@ -238,14 +238,17 @@ describe('lhTimeline module', function() {
   });
 
   describe('TimelineController', function() {
-    var $scope;
+    var $scope
+      , $controller;
 
-    beforeEach(inject(function($rootScope, $controller) {
+    beforeEach(inject(function($rootScope, _$controller_) {
+      $controller = _$controller_;
       $scope = $rootScope.$new();
-      $controller('TimelineController', {$scope: $scope, $attrs: {}});
+      $controller('TimelineController', {$scope: $scope, $attrs: {}
+        , $element: angular.element('<div />')});
     }));
 
-    it('should add getStart and end Dates to the scope', function() {
+    it('should add start and end Dates to the scope', function() {
       expect($scope.start() instanceof Date).toBeTruthy();
       expect($scope.end() instanceof Date).toBeTruthy();
     });
@@ -268,7 +271,7 @@ describe('lhTimeline module', function() {
       }).toThrow();
     });
 
-    it('should not allow the getStart to be the same or later than end', function() {
+    it('should not allow the start to be the same or later than end', function() {
       expect(function() {
         var start = new Date(2014, 2, 5, 9, 15)
           , end = new Date(2014, 2, 5, 9);
@@ -291,6 +294,22 @@ describe('lhTimeline module', function() {
       duration = $scope.duration();
       expect(duration).toEqual(900000);
     });
+
+    it('should add a buffer value in milliseconds to the scope', function() {
+      expect($scope.buffer).toBeDefined();
+      expect($scope.buffer()).toEqual(300000);
+    });
+
+    it('should allow the user to specify the buffer in minutes', function() {
+      $controller('TimelineController', {$scope: $scope, $attrs: {bufferMinutes: '2'}
+        , $element: angular.element('<div />')});
+      expect($scope.buffer()).toEqual(120000);
+    });
+
+    it('should provide access to the $element it is instantiated with', function() {
+      expect($scope.viewport).toBeDefined();
+      expect(angular.isElement($scope.viewport())).toBeTruthy();
+    });
   });
 
   describe('lhTimelineRepeat directive', function() {
@@ -306,24 +325,31 @@ describe('lhTimeline module', function() {
       }).toThrow();
 
       expect(function() {
-        $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in items"></div></lh-timeline-viewport>')(scope);
+        var scroller = $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in items"></div></lh-timeline-viewport>')(scope);
+        $('body').append(scroller);
         scope.$digest();
+        scroller.remove();
       }).not.toThrow();
     });
 
     it('Should accept the service as a variable on the scope', function() {
       // Mock timeline service on the scope
       expect(function() {
+        var scroller;
         scope.timelineService = { get: function() {} };
-        $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in timelineService"></div></lh-timeline-viewport>')(scope);
+        scroller = $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in timelineService"></div></lh-timeline-viewport>')(scope);
+        $('body').append(scroller);
         scope.$digest();
+        scroller.remove();
       }).not.toThrow();
     });
 
     it('Should accept a service locatable by the injector', function() {
       expect(function() {
-        $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in timelineService"></div></lh-timeline-viewport>')(scope);
+        var scroller = $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in timelineService"></div></lh-timeline-viewport>')(scope);
+        $('body').append(scroller);
         scope.$digest();
+        scroller.remove();
       }).not.toThrow();
     });
 

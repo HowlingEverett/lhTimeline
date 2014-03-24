@@ -40,17 +40,19 @@ lhTimeline.filter('durationToPixels', function() {
   }
 });
 
-lhTimeline.controller('TimelineController', function($scope, $attrs) {
+lhTimeline.controller('TimelineController', function($scope, $element, $attrs) {
   var start
-    , end;
+    , end
+    , TEN_MINUTES = 600000
+    , ONE_MINUTE = 60000;
 
   end = $attrs.end || new Date(); // Defaults to 'now' if not set
-  start = $attrs.start || new Date(end.getTime() - 600000); // Defaults to 10min ago
+  start = $attrs.start || new Date(end.getTime() - TEN_MINUTES); // Defaults to 10min ago
 
   $scope.buffer = function() {
     var bufferMinutes;
     bufferMinutes = +$attrs.bufferMinutes || 5;
-    return bufferMinutes * 60000 * 2; // Buffer is bufferMinutes in milliseconds
+    return bufferMinutes * ONE_MINUTE; // Buffer is bufferMinutes in milliseconds
                                       // doubled, since the buffer should apply either
                                       // side
   };
@@ -59,12 +61,20 @@ lhTimeline.controller('TimelineController', function($scope, $attrs) {
     return end - start;
   };
 
-  $scope.start = function () {
+  $scope.start = function() {
     return start;
   };
 
-  $scope.end = function () {
+  $scope.end = function() {
     return end;
+  };
+
+  $scope.bufferStart = function() {
+    return new Date(start.getTime() - $scope.buffer());
+  };
+
+  $scope.bufferEnd = function() {
+    return new Date(end.getTime() + $scope.buffer());
   };
 
   $scope.setTimelineBounds = function(startTime, endTime) {
@@ -78,6 +88,10 @@ lhTimeline.controller('TimelineController', function($scope, $attrs) {
 
     start = startTime;
     end = endTime;
+  };
+
+  $scope.viewport = function() {
+    return $element.find('.timeline_viewport');
   };
 
   return $scope;
@@ -108,17 +122,19 @@ lhTimeline.directive('lhTimelineViewport', function() {
         visibleDuration = timelineController.duration();
         viewportWidth = $element.parent().css('width');
         scrollViewWidth = durationToPixels(viewportWidth
-          , visibleDuration, visibleDuration + timelineController.buffer());
+          , visibleDuration, visibleDuration + (timelineController.buffer() * 2));
         return scrollViewWidth;
       }
 
       $element.css({overflow: 'scroll', display: 'block'});
       $element.on('scroll', function() {
-        $scope.$broadcast('timelineScrolled', $element.prop('scrollLeft'), $element.prop('scrollTop'));
+        $scope.$broadcast('timelineScrolled', $element.prop('scrollLeft')
+          , $element.prop('scrollTop'));
       });
       $element.parent().on('resize', function() {
         $element.css('width', scrollViewBufferedSize());
-        $scope.$broadcast('timelineResized', $element.prop('width'), $element.prop('height'));
+        $scope.$broadcast('timelineResized', $element.prop('width')
+          , $element.prop('height'));
       });
     }
   }
@@ -126,12 +142,14 @@ lhTimeline.directive('lhTimelineViewport', function() {
   return {
     restrict: 'E'
   , transclude: true
+  , replace: true
   , templateUrl: 'views/timeline_channel.html'
   }
-}).directive('lhTimelineRepeat', function($injector, $window, durationToPixelsFilter) {
+}).directive('lhTimelineRepeat', function($injector, $window, $filter, $timeout) {
   return {
     restrict: 'A'
   , priority: 1000
+  , terminal: true
   , transclude: 'element'
   , require: '?^lhTimelineViewport'
   , compile: function() {
@@ -142,10 +160,17 @@ lhTimeline.directive('lhTimelineViewport', function() {
           , datasource
           , tempScope
           , buffer
-          , bufferPadding
           , adapter
           , viewport
-          , durationToPixels = durationToPixelsFilter;
+          , channel
+          , isLoading
+          , loadingFn
+          , pending
+          , durationToPixels
+          , earliestLoaded
+          , latestLoaded;
+
+        durationToPixels = $filter('durationToPixels');
 
         match = iAttrs.lhTimelineRepeat.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
         if (!match) {
@@ -170,11 +195,9 @@ lhTimeline.directive('lhTimelineViewport', function() {
           }
         }
 
-        // User can set the buffer size as a variable on the container
-        buffer = Math.max(timelineController.buffer() || 0, 5);
-        bufferPadding = function() {
-
-        };
+        function bufferPadding() {
+          return viewport.width() + bufferPixels();
+        }
 
         function scrollWidth(elem) {
           return elem[0].scrollWidth || elem[0].document.documentElement.scrollWidth;
@@ -183,11 +206,167 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
         // The transcluder's linker function call
         linker(tempScope = scope.$new(), function(template) {
-          var repeaterType;
+          var repeaterType
+            , startPadding
+            , endPadding;
+
+          function getViewport() {
+            return timelineController.viewport() || $window;
+          }
+
+          function getChannel() {
+            var ch;
+            ch = iElement.parent();
+            if (ch && ch.hasClass('timeline_channel_content')) {
+              return ch;
+            }
+            return getViewport();
+          }
 
           repeaterType = template.prop('localName');
+          viewport = getViewport();
+          channel = getChannel();
 
+          function padding(repeaterType) {
+            var result;
+
+            result = angular.element('<' + repeaterType + '/>');
+            result.paddingWidth = result.width;
+            return result;
+          }
+
+          function createPadding(padding, element, direction) {
+            var reversed;
+            // TODO: remove dependency on jQuery by mixing into these functions to angular.element
+            element[direction](padding);
+
+            reversed = {
+              after: 'before'
+            , before: 'after'
+            };
+            return {
+              paddingWidth: function() {
+                return padding.paddingWidth.apply(padding, arguments);
+              }
+            , insert: function(element) {
+                return padding[reversed[direction]](element);
+              }
+            }
+          }
+
+          startPadding = createPadding(padding(repeaterType), iElement, 'before');
+          endPadding = createPadding(padding(repeaterType), iElement, 'after');
+
+          tempScope.$destroy();
+          adapter = {
+            viewport: viewport
+          , channel: channel
+          , beforePadding: startPadding.paddingWidth
+          , afterPadding: endPadding.paddingWidth
+          , append: endPadding.insert
+          , prepend: startPadding.insert
+          , latestDataPos: function() {
+              return scrollWidth(channel) - endPadding.paddingWidth();
+            }
+          , earliestDataPos: function() {
+              return startPadding.paddingWidth();
+            }
+          };
+          return adapter;
         });
+
+        function channelWidth() {
+          var contentDuration
+            , elementWidth;
+
+          contentDuration = timelineController.duration() +
+            (timelineController.buffer() * 2);
+          elementWidth = $filter('durationToPixels')(viewport.width(),
+            timelineController.duration(), contentDuration);
+
+          return elementWidth;
+        }
+
+        function bufferPixels() {
+          return durationToPixels(viewport.width()
+            , timelineController.duration(), timelineController.buffer());
+        }
+
+        // Pending is an array of captured scroll events booleans.
+        // A true value means scrolling forwards in time, false means
+        // scrolling backwards in time.
+        pending = [];
+        buffer = [];
+        // Flag representing whether the directive has pending requests
+        // to the datasource service.
+        isLoading = false;
+        loadingFn = datasource.loading || function() {};
+        viewport = adapter.viewport;
+        earliestLoaded = timelineController.bufferStart();
+        latestLoaded = timelineController.bufferEnd();
+
+        /*
+        Removes elements from start time to end time from the event buffer
+         */
+        function removeFromBuffer(start, stop) {
+          var toRemove
+            , i
+            , item;
+
+          toRemove = start;
+          i = 0;
+          while(toRemove < stop) {
+            item = buffer[i];
+            item.scope.$destroy();
+            item.element.remove();
+            i += 1;
+            toRemove = buffer.timestamp;
+          }
+
+          return buffer.splice(start, stop - start);
+        }
+
+        function reload() {
+          removeFromBuffer(0, buffer.length);
+          adapter.beforePadding(0);
+          adapter.afterPadding(0);
+          pending = [];
+          channel.width(channelWidth());
+          viewport.scrollLeft(bufferPixels());
+          earliestLoaded = null;
+          latestLoaded = null;
+          return adjustBuffer(false);
+        }
+
+        function shouldLoadBefore() {
+          if (!earliestLoaded) {
+            return true;
+          }
+          return adapter.earliestDataPos() > earliestVisiblePos() - bufferPixels();
+        }
+
+        function shouldLoadAfter() {
+          if (!latestLoaded) {
+            return true;
+          }
+          return adapter.latestDataPos() < latestVisiblePos() + bufferPixels();
+        }
+
+        function clipBefore() {
+
+        }
+
+        function clipAfter() {
+
+        }
+
+        function earliestVisiblePos() {
+          return viewport.scrollLeft();
+        }
+
+        function latestVisiblePos() {
+          return viewport.scrollLeft() + viewport.width();
+        }
 
         function scrollHandler(event) {
 
@@ -199,6 +378,197 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
         scope.$on('viewportScrolled', scrollHandler);
         scope.$on('viewportResized', resizeHandler);
+        
+        // Refresh the whole screen if the datasource changes and updates
+        // its revision property. Maybe overkill? Merge changes?
+        scope.$watch(datasource.revision, reload);
+
+        function generateItemScope(itemData) {
+          var itemScope
+            , prop;
+
+          itemScope = scope.$new();
+          for (prop in itemData) {
+            if (itemData.hasOwnProperty(prop)) {
+              itemScope[prop] = itemData[prop];
+            }
+          }
+
+          return itemScope;
+        }
+
+        function insertIndex(item) {
+          var i;
+          for (i = 0; i < buffer.length; i++) {
+            if (buffer[i].scope.start > item.start) {
+              break;
+            }
+          }
+          return i;
+        }
+
+        function insert(item) {
+          var itemScope
+            , index
+            , toBeAppended
+            , wrapper;
+
+          itemScope = generateItemScope(item);
+          index = insertIndex(item);
+          toBeAppended = index > 0;
+          wrapper = {
+            scope: itemScope
+          };
+
+          linker(itemScope, function(clone) {
+            wrapper.element = clone;
+            if (toBeAppended) {
+              if (index === buffer.length) {
+                adapter.append(clone);
+                buffer.push(wrapper);
+              } else {
+                buffer[index].element.after(clone);
+                buffer.splice(index, 0, wrapper);
+              }
+            } else {
+              adapter.prepend(clone);
+              buffer.unshift(wrapper);
+            }
+          });
+
+          return {
+            appended: toBeAppended
+          , wrapper: wrapper
+          };
+        }
+
+        /*
+        Each time we scroll we enqueue the captured event as a fetch
+        call in our pending queue. finalize() will reduce this queue
+        in order until it's empty
+         */
+        function enqueueFetch(scrollingForwards, scrolling) {
+          if (!isLoading) {
+            isLoading = true;
+            loadingFn(true);
+          }
+          // Kick off the fetch/finalize calls if we are adding to
+          // an empty queue. If the queue has content, then we are
+          // already doing this.
+          if (pending.push(scrollingForwards) === 1) {
+            return fetch(scrolling);
+          }
+        }
+
+        function fetchForwards(scrolling) {
+          if (buffer.length && !shouldLoadAfter()) {
+            return finalize(scrolling);
+          }
+
+          return datasource.get(latestLoaded || timelineController.bufferStart(), timelineController.bufferEnd()
+          , function(events) {
+            var newItems = [];
+            // Clip off earlier items
+            clipBefore();
+
+            events.forEach(function(evt) {
+              newItems.push(insert(evt));
+            });
+
+            return finalize(scrolling, newItems);
+          });
+        }
+
+        function fetchBackwards(scrolling) {
+
+          if (buffer.length && !shouldLoadBefore()) {
+            return finalize(scrolling);
+          }
+
+          return datasource.get(earliestLoaded || timelineController.bufferEnd(), timelineController.bufferStart(), function(events) {
+            var newItems = [];
+            // Clip off later items
+            clipAfter();
+
+            events.forEach(function(evt) {
+              newItems.unshift(evt);
+            });
+
+            return finalize(scrolling, newItems);
+          });
+        }
+
+        /*
+        Fetch does the actual work of getting new data from the
+        datasource service, by calling its get function
+        The get function should have the signature get(start, end, cb)
+         */
+        function fetch(scrolling) {
+          var scrollingForwards;
+
+          // Grab the front element in the pending queue
+          scrollingForwards = pending[0];
+
+          // We load forwards or backward in time based on the scroll direction
+          if (scrollingForwards) {
+            fetchForwards(scrolling);
+          } else {
+            fetchBackwards(scrolling);
+          }
+        }
+
+        /*
+        Finalize processes items loaded by a call to fetch and adjusts
+        the buffer for of timeline events accordingly. If there are
+        still pending scroll events, finalize will call fetch again -
+        these two functions call each other until the pending stack
+        is empty.
+         */
+        function finalize(scrolling, newItems) {
+
+        }
+        
+        function adjustAdapterWidth(appendedItem, wrapper) {
+          var newWidth;
+          
+          if (appendedItem) {
+            return adapter.afterPadding(Math.max(0, adapter.afterPadding() - wrapper.element.outerWidth(true)));
+          }
+          
+          newWidth = adapter.beforePadding() - wrapper.element.outerWidth(true);
+          
+          if (newWidth) {
+            return adapter.beforePadding(newWidth);
+          } else {
+            return viewport.scrollLeft(viewport.scrollLeft() + wrapper.element.outerWidth(true));
+          }
+        }
+        
+        function adjustBuffer(scrolling, newItems, finalize) {
+          function doAdjustment() {
+            if (shouldLoadAfter()) {
+              enqueueFetch(true, scrolling);
+            }
+            if (shouldLoadBefore()) {
+              enqueueFetch(false, scrolling);
+            }
+            
+            if (finalize) {
+              return finalize();
+            }
+          }
+          
+          if (newItems) {
+            return $timeout(function() {
+              newItems.forEach(function(item) {
+                adjustAdapterWidth(item.appended, item.wrapper);
+              });
+              return doAdjustment();
+            });
+          }
+          return doAdjustment();
+        }
+
       }
     }
   };

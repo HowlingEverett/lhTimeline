@@ -65,14 +65,47 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
         channelId1: audioContent
       , channelId2: screenCapContent
       , channelId3: locationContent
+      , default: audioContent
       };
     }
   };
-  
-  contentService.get = function(start, end, success) {
-    $timeout(function() {
-      success(this.channels(start, end));
-    }, 100);
+
+  /*
+  get(start, end, channelIdentifier, success)
+  or
+  get(start, end, success)
+   */
+  contentService.get = function() {
+    var start
+      , end
+      , contentIdentifier
+      , success;
+
+    if (arguments.length === 3) {
+      start = arguments[0];
+      end = arguments[1];
+      contentIdentifier = 'default';
+      success = arguments[2];
+    } else if (arguments.length === 4) {
+      start = arguments[0];
+      end = arguments[1];
+      contentIdentifier = arguments[2];
+      success = arguments[3];
+    } else {
+      throw new Error('get(start, end, [contentIdentifier], successFn)');
+    }
+
+    if (typeof success !== 'function') {
+      throw new Error('Last argument must be a success callback');
+    }
+
+    if (!(start instanceof Date && end instanceof Date)) {
+      throw new Error('Start and end parameters must be Date objects');
+    }
+
+
+    success(this.channels(start, end)[contentIdentifier]);
+
   };
   
   current = 0;
@@ -113,7 +146,7 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
       , eventDuration
       , eventEnd;
     
-    eventStart = getRandomInt(start.getTime(), end.getTime());
+    eventStart = new Date(getRandomInt(start.getTime(), end.getTime()));
     eventDuration = getRandomInt(10000, end - eventStart);
     eventEnd = new Date(eventStart.getTime() + eventDuration);
     
