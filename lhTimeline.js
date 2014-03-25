@@ -332,6 +332,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
           adapter.afterPadding(0);
           pending = [];
           channel.width(channelWidth());
+          channel.css({position: 'relative'});
           viewport.scrollLeft(bufferPixels());
           earliestLoaded = null;
           latestLoaded = null;
@@ -407,6 +408,25 @@ lhTimeline.directive('lhTimelineViewport', function() {
           return i;
         }
 
+        function sizeTimelineEvent(startTime, endTime, element) {
+          var duration;
+          duration = endTime - startTime;
+          element.css('display', 'block');
+          element.width(durationToPixels(viewport.width()
+            , timelineController.duration(), duration));
+          return element;
+        }
+
+        function positionTimelineEvent(startTime, element) {
+          var offsetDuration
+            , offsetPixels;
+          offsetDuration = startTime - timelineController.bufferStart();
+          offsetPixels = durationToPixels(viewport.width()
+            , timelineController.duration(), offsetDuration);
+          element.css({'left': offsetPixels + 'px', position: 'absolute'});
+          return element;
+        }
+
         function insert(item) {
           var itemScope
             , index
@@ -421,7 +441,10 @@ lhTimeline.directive('lhTimelineViewport', function() {
           };
 
           linker(itemScope, function(clone) {
+            clone = sizeTimelineEvent(itemScope.start, itemScope.end, clone);
+            clone = positionTimelineEvent(itemScope.start, clone);
             wrapper.element = clone;
+
             if (toBeAppended) {
               if (index === buffer.length) {
                 adapter.append(clone);

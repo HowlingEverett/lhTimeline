@@ -4,10 +4,11 @@
 }
 
 .timeline_channel_content {
-    height: 24px;
+    height: 80px;
 }
 
 .timeline_content {
     display: inline-block;
     margin-left: 24px;
+    background-color: darkgreen;
 }
