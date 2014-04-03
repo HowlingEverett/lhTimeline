@@ -12,15 +12,20 @@ lhTimeline.filter('durationToPixels', function() {
       , elementWidth;
 
     if (!(arguments.length === 3 || arguments.length === 4)) {
-      throw new Error('durationToPixels(elementWidth, totalDuration, elementDuration, [bufferDuration])');
+      throw new Error('durationToPixels(viewportWidth, totalDuration, elementDuration, [bufferDuration])');
     }
 
     widthValue = Number(viewportWidth);
+
+    if (widthValue === 0) {
+      return 0;
+    }
+
     if (!widthValue) {
       widthPat = /(\d+\.?\d*)(px|%|em|rem|pt|in|cm|mm|ex|pc)/;
       widthMatch = widthPat.exec(viewportWidth);
       if (!widthMatch) {
-        throw new Error('elementWidth must be a number or a CSS-parseable string (e.g. 30px, 3.5rem');
+        throw new Error('viewportWidth must be a number or a CSS-parseable string (e.g. 30px, 3.5rem');
       }
       widthValue = Number(widthMatch[1]);
       widthUnit = widthMatch[2];
@@ -28,7 +33,7 @@ lhTimeline.filter('durationToPixels', function() {
 
     if (!(typeof totalDuration === 'number' &&
       typeof elementDuration === 'number')) {
-      throw new Error('totalDuration and elementDuration must be in milliseconds');
+      throw new Error('totalDuration and viewportDuration must be in milliseconds');
     }
 
     unitPerMs = widthValue / totalDuration;
@@ -37,6 +42,62 @@ lhTimeline.filter('durationToPixels', function() {
       elementWidth = Math.floor(elementWidth);
     }
     return widthUnit ? elementWidth + widthUnit : elementWidth;
+  }
+}).filter('pixelsToDuration', function() {
+  return function(viewportWidth, totalDuration, elementWidth) {
+    var widthPat
+      , widthMatch
+      , widthValue
+      , widthUnit
+      , elementWidthValue
+      , elementWidthUnit
+      , elementToViewportRatio
+      , elementDuration;
+
+    if (arguments.length !== 3) {
+      throw new Error('pixelsToDuration(viewportWidth, totalDuration, elementWidth)');
+    }
+
+    widthPat = /(\d+\.?\d*)(px|%|em|rem|pt|in|cm|mm|ex|pc)/;
+
+    widthValue = Number(viewportWidth);
+
+    if (widthValue === 0) {
+      return 0;
+    }
+
+    if (!widthValue) {
+      widthMatch = widthPat.exec(viewportWidth);
+      if (!widthMatch) {
+        throw new Error('viewportWidth must be a number or a CSS-parseable string (e.g. 30px, 3.5rem');
+      }
+      widthValue = Number(widthMatch[1]);
+      widthUnit = widthMatch[2];
+    }
+    elementWidthValue = Number(elementWidth);
+    if (elementWidthValue === 0) {
+      return 0;
+    }
+    if (!elementWidthValue) {
+      widthMatch = widthPat.exec(elementWidth);
+      if (!widthMatch) {
+        throw new Error('elementWidth must be a number or a CSS-parseable string (e.g. 30px, 3.5rem');
+      }
+      elementWidthValue = Number(widthMatch[1]);
+      elementWidthUnit = Number(widthMatch[2]);
+
+      if (elementWidthUnit !== widthUnit) {
+        throw new Error('element and viewport width must use the same CSS unit (sorry!)');
+      }
+    }
+
+    if (typeof totalDuration !== 'number') {
+      throw new Error('totalDuration must be in milliseconds');
+    }
+
+    elementToViewportRatio = elementWidthValue / widthValue;
+    elementDuration = elementToViewportRatio * totalDuration;
+    return elementDuration;
   }
 });
 
@@ -53,8 +114,6 @@ lhTimeline.controller('TimelineController', function($scope, $element, $attrs) {
     var bufferMinutes;
     bufferMinutes = +$attrs.bufferMinutes || 5;
     return bufferMinutes * ONE_MINUTE; // Buffer is bufferMinutes in milliseconds
-                                      // doubled, since the buffer should apply either
-                                      // side
   };
 
   $scope.duration = function() {
@@ -88,6 +147,11 @@ lhTimeline.controller('TimelineController', function($scope, $element, $attrs) {
 
     start = startTime;
     end = endTime;
+  };
+
+  $scope.adjustTimelineWindow = function(msAdjustment) {
+    start = new Date(start.getTime() + msAdjustment);
+    end = new Date(end.getTime() + msAdjustment);
   };
 
   $scope.viewport = function() {
@@ -145,7 +209,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
   , replace: true
   , templateUrl: 'views/timeline_channel.html'
   }
-}).directive('lhTimelineRepeat', function($injector, $window, $filter, $timeout) {
+}).directive('lhTimelineRepeat', function($injector, $window, $filter, $rootScope, $timeout) {
   return {
     restrict: 'A'
   , priority: 1000
@@ -155,20 +219,22 @@ lhTimeline.directive('lhTimelineViewport', function() {
   , compile: function() {
       return function(scope, iElement, iAttrs, timelineController, linker) {
         var match
-          , itemName
           , datasourceName
           , datasource
-          , tempScope
           , buffer
-          , adapter
           , viewport
           , channel
+          , wrapper
+          , adapter
+          , tempScope
           , isLoading
           , loadingFn
           , pending
           , durationToPixels
           , earliestLoaded
-          , latestLoaded;
+          , latestLoaded
+          , lastScrollPosition
+          , pxScrolled;
 
         durationToPixels = $filter('durationToPixels');
 
@@ -177,7 +243,6 @@ lhTimeline.directive('lhTimelineViewport', function() {
           throw new Error('Expected lhTimeline directive in the form of "item in timelineService" but got "' +
             iAttrs.lhTimeline + '"');
         }
-        itemName = match[1];
         datasourceName = match[2];
 
         function isDatasource(datasource) {
@@ -194,86 +259,6 @@ lhTimeline.directive('lhTimelineViewport', function() {
             throw new Error(datasourceName + ' is not a valid datasource for the timeline');
           }
         }
-
-        function bufferPadding() {
-          return viewport.width() + bufferPixels();
-        }
-
-        function scrollWidth(elem) {
-          return elem[0].scrollWidth || elem[0].document.documentElement.scrollWidth;
-        }
-        adapter = null;
-
-        // The transcluder's linker function call
-        linker(tempScope = scope.$new(), function(template) {
-          var repeaterType
-            , startPadding
-            , endPadding;
-
-          function getViewport() {
-            return timelineController.viewport() || $window;
-          }
-
-          function getChannel() {
-            var ch;
-            ch = iElement.parent();
-            if (ch && ch.hasClass('timeline_channel_content')) {
-              return ch;
-            }
-            return getViewport();
-          }
-
-          repeaterType = template.prop('localName');
-          viewport = getViewport();
-          channel = getChannel();
-
-          function padding(repeaterType) {
-            var result;
-
-            result = angular.element('<' + repeaterType + '/>');
-            result.paddingWidth = result.width;
-            return result;
-          }
-
-          function createPadding(padding, element, direction) {
-            var reversed;
-            // TODO: remove dependency on jQuery by mixing into these functions to angular.element
-            element[direction](padding);
-
-            reversed = {
-              after: 'before'
-            , before: 'after'
-            };
-            return {
-              paddingWidth: function() {
-                return padding.paddingWidth.apply(padding, arguments);
-              }
-            , insert: function(element) {
-                return padding[reversed[direction]](element);
-              }
-            }
-          }
-
-          startPadding = createPadding(padding(repeaterType), iElement, 'before');
-          endPadding = createPadding(padding(repeaterType), iElement, 'after');
-
-          tempScope.$destroy();
-          adapter = {
-            viewport: viewport
-          , channel: channel
-          , beforePadding: startPadding.paddingWidth
-          , afterPadding: endPadding.paddingWidth
-          , append: endPadding.insert
-          , prepend: startPadding.insert
-          , latestDataPos: function() {
-              return scrollWidth(channel) - endPadding.paddingWidth();
-            }
-          , earliestDataPos: function() {
-              return startPadding.paddingWidth();
-            }
-          };
-          return adapter;
-        });
 
         function channelWidth() {
           var contentDuration
@@ -292,6 +277,80 @@ lhTimeline.directive('lhTimelineViewport', function() {
             , timelineController.duration(), timelineController.buffer());
         }
 
+        function getViewport() {
+          return timelineController.viewport() || $window;
+        }
+
+        function getChannel() {
+          var ch;
+          ch = iElement.parent();
+          if (ch && ch.hasClass('timeline_channel_content')) {
+            return ch;
+          }
+          return getViewport();
+        }
+
+        function loadThreshold() {
+          return viewport.width() * Math.max(0.1, +iAttrs.threshold || 0.1);
+        }
+
+        function scrollWidth(elem) {
+          return elem[0].scrollWidth || elem[0].document.documentElement.scrollWidth;
+        }
+        adapter = null;
+
+        linker(tempScope = scope.$new(), function(template) {
+          var repeaterType
+            , startPadding
+            , endPadding;
+
+          repeaterType = template.prop('localName');
+          viewport = getViewport();
+          channel = getChannel();
+
+          function padding(position) {
+            var result;
+
+            result = angular.element('<div class="timeline_padding_' + position + '" />');
+            result.paddingWidth = result.width;
+            return result;
+          }
+
+          function createPadding(padding, channel, direction) {
+            channel[direction](padding);
+            return {
+              paddingWidth: function() {
+                return padding.paddingWidth.apply(padding, arguments);
+              }
+            }
+          }
+
+          function setupPaddingStyles() {
+            channel.wrap(angular.element('<div class="timeline_channel_content_wrapper"/>'));
+            wrapper = channel.parent();
+            startPadding = createPadding(padding('before'), channel, 'before');
+            endPadding = createPadding(padding('after'), channel, 'after');
+            wrapper.children().css({display: 'inline-block', 'min-height': '1px'});
+          }
+
+          setupPaddingStyles();
+
+          tempScope.$destroy();
+          adapter = {
+            viewport: viewport
+          , channel: channel
+          , beforePadding: startPadding.paddingWidth
+          , afterPadding: endPadding.paddingWidth
+          , latestDataPos: function() {
+              return scrollWidth(viewport) - endPadding.paddingWidth();
+            }
+          , earliestDataPos: function() {
+              return startPadding.paddingWidth();
+            }
+          };
+          return adapter;
+        });
+
         // Pending is an array of captured scroll events booleans.
         // A true value means scrolling forwards in time, false means
         // scrolling backwards in time.
@@ -302,8 +361,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
         isLoading = false;
         loadingFn = datasource.loading || function() {};
         viewport = adapter.viewport;
-        earliestLoaded = timelineController.bufferStart();
-        latestLoaded = timelineController.bufferEnd();
+        channel = adapter.channel;
 
         /*
         Removes elements from start time to end time from the event buffer
@@ -328,29 +386,31 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
         function reload() {
           removeFromBuffer(0, buffer.length);
-          adapter.beforePadding(0);
-          adapter.afterPadding(0);
           pending = [];
           channel.width(channelWidth());
           channel.css({position: 'relative'});
           viewport.scrollLeft(bufferPixels());
+          lastScrollPosition = viewport.scrollLeft();
           earliestLoaded = null;
           latestLoaded = null;
+          pxScrolled = 0;
           return adjustBuffer(false);
         }
 
         function shouldLoadBefore() {
-          if (!earliestLoaded) {
-            return true;
-          }
-          return adapter.earliestDataPos() > earliestVisiblePos() - bufferPixels();
+          return adapter.earliestDataPos() > earliestVisiblePos() - loadThreshold();
         }
 
         function shouldLoadAfter() {
-          if (!latestLoaded) {
-            return true;
-          }
-          return adapter.latestDataPos() < latestVisiblePos() + bufferPixels();
+          return adapter.latestDataPos() < latestVisiblePos() + loadThreshold();
+        }
+
+        function timeDeltaScrolled(lastScrollPos, newScrollPos) {
+          var scrollDelta;
+          scrollDelta = newScrollPos - lastScrollPos;
+
+          return $filter('pixelsToDuration')(viewport.width()
+            , timelineController.duration(), scrollDelta);
         }
 
         function clipBefore() {
@@ -369,16 +429,26 @@ lhTimeline.directive('lhTimelineViewport', function() {
           return viewport.scrollLeft() + viewport.width();
         }
 
-        function scrollHandler(event) {
+        function scrollHandler() {
+          var msScrolled;
+
+          pxScrolled = pxScrolled + (viewport.scrollLeft() - lastScrollPosition);
+          msScrolled = timeDeltaScrolled(lastScrollPosition, viewport.scrollLeft());
+
+          lastScrollPosition = viewport.scrollLeft();
+          timelineController.adjustTimelineWindow(msScrolled);
+
+          if (!$rootScope.$$phase && !isLoading) {
+            adjustBuffer(true);
+          }
+        }
+
+        function resizeHandler() {
 
         }
 
-        function resizeHandler(event) {
-
-        }
-
-        scope.$on('viewportScrolled', scrollHandler);
-        scope.$on('viewportResized', resizeHandler);
+        scope.$on('timelineScrolled', scrollHandler);
+        scope.$on('timelineResized', resizeHandler);
         
         // Refresh the whole screen if the datasource changes and updates
         // its revision property. Maybe overkill? Merge changes?
@@ -447,14 +517,14 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
             if (toBeAppended) {
               if (index === buffer.length) {
-                adapter.append(clone);
+                channel.append(clone);
                 buffer.push(wrapper);
               } else {
                 buffer[index].element.after(clone);
                 buffer.splice(index, 0, wrapper);
               }
             } else {
-              adapter.prepend(clone);
+              channel.prepend(clone);
               buffer.unshift(wrapper);
             }
           });
@@ -498,6 +568,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
               newItems.push(insert(evt));
             });
 
+            latestLoaded = timelineController.bufferEnd();
             return finalize(scrolling, newItems);
           });
         }
@@ -517,6 +588,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
               newItems.unshift(evt);
             });
 
+            earliestLoaded = timelineController.bufferStart();
             return finalize(scrolling, newItems);
           });
         }
@@ -548,23 +620,41 @@ lhTimeline.directive('lhTimelineViewport', function() {
         is empty.
          */
         function finalize(scrolling, newItems) {
-
+          return adjustBuffer(scrolling, newItems, function() {
+            pending.shift();
+            if (pending.length === 0) {
+              isLoading = false;
+              return loadingFn(false);
+            } else {
+              return fetch(scrolling);
+            }
+          });
         }
         
-        function adjustAdapterWidth(appendedItem, wrapper) {
-          var newWidth;
-          
-          if (appendedItem) {
-            return adapter.afterPadding(Math.max(0, adapter.afterPadding() - wrapper.element.outerWidth(true)));
+        function adjustAdapterWidth(pxScrolled) {
+          var scrollingBack;
+
+          if (pxScrolled === 0) {
+            return;
           }
-          
-          newWidth = adapter.beforePadding() - wrapper.element.outerWidth(true);
-          
-          if (newWidth) {
-            return adapter.beforePadding(newWidth);
+
+          // Positive pixels means scrolling forwards, negative backwards
+          scrollingBack = pxScrolled < 0;
+          pxScrolled = Math.abs(pxScrolled);
+          channel.width(channel.width() + pxScrolled);
+
+          if (scrollingBack) {
+//            adapter.beforePadding(Math.min(adapter.beforePadding() - pxScrolled, 0));
+//            adapter.afterPadding(adapter.afterPadding() + pxScrolled);
+//            viewport.scrollLeft(viewport.scrollLeft() + pxScrolled);
           } else {
-            return viewport.scrollLeft(viewport.scrollLeft() + wrapper.element.outerWidth(true));
+//            adapter.beforePadding(adapter.beforePadding() + pxScrolled);
+//            adapter.afterPadding(Math.min(adapter.afterPadding() - pxScrolled, 0));
+//            viewport.scrollLeft(viewport.scrollLeft() - pxScrolled);
           }
+
+          // reset pxScrolled to 0 once we've applied it to the adapter padding
+          pxScrolled = 0;
         }
         
         function adjustBuffer(scrolling, newItems, finalize) {
@@ -580,16 +670,14 @@ lhTimeline.directive('lhTimelineViewport', function() {
               return finalize();
             }
           }
-          
+
           if (newItems) {
-            return $timeout(function() {
-              newItems.forEach(function(item) {
-                adjustAdapterWidth(item.appended, item.wrapper);
-              });
-              return doAdjustment();
-            });
+            adjustAdapterWidth(pxScrolled);
+            pxScrolled = 0;
+            return doAdjustment();
+          } else {
+            return doAdjustment();
           }
-          return doAdjustment();
         }
 
       }
