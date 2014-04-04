@@ -179,12 +179,12 @@ describe('lhTimeline module', function() {
     it('should broadcast a scope event when the user scrolls the viewport', function() {
       var content, viewport;
       spyOn(scope, '$broadcast');
-      expect(scope.$broadcast).not.toHaveBeenCalledWith('timelineScrolled');
-
+      expect(scope.$broadcast).not.toHaveBeenCalled();
       content = tmpl.find('.timeline_channels');
       viewport = tmpl.find('.timeline_viewport');
       content.css('width', '1000px');
       viewport.css('width', '200px');
+
       viewport.scrollLeft(800);
       viewport.triggerHandler('scroll');
       expect(scope.$broadcast).toHaveBeenCalledWith('timelineScrolled', 0, 0);
@@ -313,51 +313,93 @@ describe('lhTimeline module', function() {
   });
 
   describe('lhTimelineRepeat directive', function() {
+    var tmpl
+      , durationToPixels
+      , datasource
+      , viewport
+      , channel
+      , called; // We want to track the loadingFn callback, for some reason my spy is not working. Asynchronous? Not really
 
     beforeEach(function() {
-      scope.items = {get: function() {}};
+      inject(function($filter) {
+        durationToPixels = $filter('durationToPixels');
+        datasource = {
+          get: function() {}
+        , loading: function() {
+            called = true;
+          }
+        , revision: 0
+        };
+        scope.datasource = datasource;
+        tmpl = $compile('<lh-timeline-viewport visible-minutes="10"><lh-timeline-channel><div lh-timeline-repeat="item in datasource" threshold="0.3">{{title}}</div></lh-timeline-channel></lh-timeline-viewport>')(scope);
+        scope.$digest();
+        $('body').height(800).append(tmpl);
+        viewport = tmpl.find('.timeline_viewport');
+        channel = tmpl.find('.timeline_channel_content');
+        viewport.css({width: '800px', height: '30px'});
+        channel.css({width: '3000px', height: '30px'});
+        called = false;
+      });
     });
 
-    it('Should expect a parameter in the form \'thing in thingService\'', function() {
-      expect(function() {
-        $compile('<lh-timeline-viewport><div lh-timeline-repeat="bad parameter"></div></lh-timeline-viewport>')(scope);
-        scope.$digest();
-      }).toThrow();
-
-      expect(function() {
-        var scroller = $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in items"></div></lh-timeline-viewport>')(scope);
-        $('body').append(scroller);
-        scope.$digest();
-        scroller.remove();
-      }).not.toThrow();
+    afterEach(function() {
+      tmpl.remove();
     });
 
-    it('Should accept the service as a variable on the scope', function() {
-      // Mock timeline service on the scope
-      expect(function() {
-        var scroller;
-        scope.timelineService = { get: function() {} };
-        scroller = $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in timelineService"></div></lh-timeline-viewport>')(scope);
-        $('body').append(scroller);
-        scope.$digest();
-        scroller.remove();
-      }).not.toThrow();
+    it('should create a wrapper and padding elements', function() {
+      var wrapper
+        , beforePadding
+        , afterPadding;
+
+      wrapper = tmpl.find('.timeline_repeat_wrapper');
+      expect(wrapper.children().length).toBe(3);
+      beforePadding = wrapper.children().eq(0);
+      afterPadding = wrapper.children().eq(2);
+      expect(beforePadding.length).toBe(1);
+      expect(beforePadding.prop('tagName').toLocaleLowerCase()).toEqual('div');
+      expect(beforePadding.hasClass('timeline_repeat_padding')).toBeTruthy();
+      expect(beforePadding.hasClass('before')).toBeTruthy();
+      expect(afterPadding.length).toBe(1);
+      expect(afterPadding.prop('tagName').toLocaleLowerCase()).toEqual('div');
+      expect(afterPadding.hasClass('timeline_repeat_padding')).toBeTruthy();
+      expect(afterPadding.hasClass('after')).toBeTruthy();
     });
 
-    it('Should accept a service locatable by the injector', function() {
-      expect(function() {
-        var scroller = $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in timelineService"></div></lh-timeline-viewport>')(scope);
-        $('body').append(scroller);
-        scope.$digest();
-        scroller.remove();
-      }).not.toThrow();
+    it('should have a scroll threshold which triggers loading when scrolling a certain distance', function() {
+      var scrollPixels
+        , belowThreshold;
+
+      expect(called).toBeFalsy();
+
+      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
+      belowThreshold = scrollPixels / 2;
+      viewport.scrollLeft(belowThreshold);
+      viewport.triggerHandler('scroll');
+      expect(called).toBeFalsy();
+
+      viewport.scrollLeft(scrollPixels);
+      viewport.triggerHandler('scroll');
+      expect(called).toBeTruthy();
     });
 
-    it('Should expect either a service or a scope object with a `get` function', function() {
-      expect(function() {
-        $compile('<lh-timeline-viewport><div lh-timeline-repeat="item in nonExistentService"></div></lh-timeline-viewport>')(scope);
-        scope.$digest();
-      }).toThrow();
+    it('should reset the scroll threshold each time it is triggered', function() {
+      var scrollPixels;
+
+      expect(called).toBeFalsy();
+
+      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
+      viewport.scrollLeft(scrollPixels);
+      viewport.triggerHandler('scroll');
+      expect(called).toBeTruthy();
+
+      called = false;
+      viewport.scrollLeft(scrollPixels * 2);
+      viewport.triggerHandler('scroll');
+      expect(called).toBeTruthy();
+    });
+
+    it('should resize the padding to extend the scroll area past the scroll threshold', function() {
+
     });
   });
 });

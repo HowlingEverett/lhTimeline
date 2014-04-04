@@ -104,11 +104,13 @@ lhTimeline.filter('durationToPixels', function() {
 lhTimeline.controller('TimelineController', function($scope, $element, $attrs) {
   var start
     , end
+    , visibleMinutes
     , TEN_MINUTES = 600000
     , ONE_MINUTE = 60000;
 
   end = $attrs.end || new Date(); // Defaults to 'now' if not set
   start = $attrs.start || new Date(end.getTime() - TEN_MINUTES); // Defaults to 10min ago
+  visibleMinutes = $attrs.visibleMinutes || 10;
 
   $scope.buffer = function() {
     var bufferMinutes;
@@ -218,468 +220,111 @@ lhTimeline.directive('lhTimelineViewport', function() {
   , require: '?^lhTimelineViewport'
   , compile: function() {
       return function(scope, iElement, iAttrs, timelineController, linker) {
-        var match
-          , datasourceName
-          , datasource
-          , buffer
-          , viewport
-          , channel
+        var datasource
           , wrapper
           , adapter
-          , tempScope
-          , isLoading
+          , match
+          , datasourceName
+          , loading
           , loadingFn
-          , pending
-          , durationToPixels
-          , earliestLoaded
-          , latestLoaded
-          , lastScrollPosition
-          , pxScrolled;
+          , pixelsScrolled
+          , lastScrollLeft
+          , durationToPixels = $filter('durationToPixels');
 
-        durationToPixels = $filter('durationToPixels');
+        function initialize() {
+          match = iAttrs.lhTimelineRepeat.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
+          if (!match) {
+            throw new Error('Expected lhTimeline directive in the form of "item in timelineService" but got "' +
+              iAttrs.lhTimeline + '"');
+          }
+          datasourceName = match[2];
 
-        match = iAttrs.lhTimelineRepeat.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
-        if (!match) {
-          throw new Error('Expected lhTimeline directive in the form of "item in timelineService" but got "' +
-            iAttrs.lhTimeline + '"');
-        }
-        datasourceName = match[2];
+          function isDatasource(datasource) {
+            return angular.isObject(datasource) &&
+              datasource.get &&
+              angular.isFunction(datasource.get);
+          }
 
-        function isDatasource(datasource) {
-          return angular.isObject(datasource) &&
-            datasource.get &&
-            angular.isFunction(datasource.get);
-        }
+          datasource = scope[datasourceName];
 
-        datasource = scope[datasourceName];
-
-        if (!isDatasource(datasource)) {
-          datasource = $injector.get(datasourceName);
           if (!isDatasource(datasource)) {
-            throw new Error(datasourceName + ' is not a valid datasource for the timeline');
+            datasource = $injector.get(datasourceName);
+            if (!isDatasource(datasource)) {
+              throw new Error(datasourceName + ' is not a valid datasource for the timeline');
+            }
           }
         }
 
-        function channelWidth() {
-          var contentDuration
-            , elementWidth;
+        function buildAdapter() {
+          var channel
+            , viewport;
 
-          contentDuration = timelineController.duration() +
-            (timelineController.buffer() * 2);
-          elementWidth = $filter('durationToPixels')(viewport.width(),
-            timelineController.duration(), contentDuration);
-
-          return elementWidth;
-        }
-
-        function bufferPixels() {
-          return durationToPixels(viewport.width()
-            , timelineController.duration(), timelineController.buffer());
-        }
-
-        function getViewport() {
-          return timelineController.viewport() || $window;
-        }
-
-        function getChannel() {
-          var ch;
-          ch = iElement.parent();
-          if (ch && ch.hasClass('timeline_channel_content')) {
-            return ch;
+          function getViewport() {
+            return timelineController.viewport() || $window;
           }
-          return getViewport();
-        }
 
-        function loadThreshold() {
-          return viewport.width() * Math.max(0.1, +iAttrs.threshold || 0.1);
-        }
+          function getChannel() {
+            var ch;
+            ch = iElement.parent();
+            if (ch && ch.hasClass('timeline_channel_content')) {
+              return ch;
+            }
+            return getViewport();
+          }
 
-        function scrollWidth(elem) {
-          return elem[0].scrollWidth || elem[0].document.documentElement.scrollWidth;
-        }
-        adapter = null;
-
-        linker(tempScope = scope.$new(), function(template) {
-          var repeaterType
-            , startPadding
-            , endPadding;
-
-          repeaterType = template.prop('localName');
-          viewport = getViewport();
           channel = getChannel();
+          viewport = getViewport();
 
-          function padding(position) {
-            var result;
+          channel.wrap('<div class="timeline_repeat_wrapper" />');
+          channel.before('<div class="timeline_repeat_padding before" />');
+          channel.after('<div class="timeline_repeat_padding after" />');
 
-            result = angular.element('<div class="timeline_padding_' + position + '" />');
-            result.paddingWidth = result.width;
-            return result;
-          }
+          return {
+            channel: channel
+          , viewport: viewport
+          , moveBackwards: function() {
 
-          function createPadding(padding, channel, direction) {
-            channel[direction](padding);
-            return {
-              paddingWidth: function() {
-                return padding.paddingWidth.apply(padding, arguments);
-              }
             }
-          }
+          , moveForwards: function() {
 
-          function setupPaddingStyles() {
-            channel.wrap(angular.element('<div class="timeline_channel_content_wrapper"/>'));
-            wrapper = channel.parent();
-            startPadding = createPadding(padding('before'), channel, 'before');
-            endPadding = createPadding(padding('after'), channel, 'after');
-            wrapper.children().css({display: 'inline-block', 'min-height': '1px'});
-          }
-
-          setupPaddingStyles();
-
-          tempScope.$destroy();
-          adapter = {
-            viewport: viewport
-          , channel: channel
-          , beforePadding: startPadding.paddingWidth
-          , afterPadding: endPadding.paddingWidth
-          , latestDataPos: function() {
-              return scrollWidth(viewport) - endPadding.paddingWidth();
-            }
-          , earliestDataPos: function() {
-              return startPadding.paddingWidth();
             }
           };
-          return adapter;
-        });
-
-        // Pending is an array of captured scroll events booleans.
-        // A true value means scrolling forwards in time, false means
-        // scrolling backwards in time.
-        pending = [];
-        buffer = [];
-        // Flag representing whether the directive has pending requests
-        // to the datasource service.
-        isLoading = false;
-        loadingFn = datasource.loading || function() {};
-        viewport = adapter.viewport;
-        channel = adapter.channel;
-
-        /*
-        Removes elements from start time to end time from the event buffer
-         */
-        function removeFromBuffer(start, stop) {
-          var toRemove
-            , i
-            , item;
-
-          toRemove = start;
-          i = 0;
-          while(toRemove < stop) {
-            item = buffer[i];
-            item.scope.$destroy();
-            item.element.remove();
-            i += 1;
-            toRemove = buffer.timestamp;
-          }
-
-          return buffer.splice(start, stop - start);
         }
 
-        function reload() {
-          removeFromBuffer(0, buffer.length);
-          pending = [];
-          channel.width(channelWidth());
-          channel.css({position: 'relative'});
-          viewport.scrollLeft(bufferPixels());
-          lastScrollPosition = viewport.scrollLeft();
-          earliestLoaded = null;
-          latestLoaded = null;
-          pxScrolled = 0;
-          return adjustBuffer(false);
-        }
-
-        function shouldLoadBefore() {
-          return adapter.earliestDataPos() > earliestVisiblePos() - loadThreshold();
-        }
-
-        function shouldLoadAfter() {
-          return adapter.latestDataPos() < latestVisiblePos() + loadThreshold();
-        }
-
-        function timeDeltaScrolled(lastScrollPos, newScrollPos) {
-          var scrollDelta;
-          scrollDelta = newScrollPos - lastScrollPos;
-
-          return $filter('pixelsToDuration')(viewport.width()
-            , timelineController.duration(), scrollDelta);
-        }
-
-        function clipBefore() {
+        function readjustVisibleTime() {
 
         }
 
-        function clipAfter() {
-
-        }
-
-        function earliestVisiblePos() {
-          return viewport.scrollLeft();
-        }
-
-        function latestVisiblePos() {
-          return viewport.scrollLeft() + viewport.width();
+        function thresholdPixels() {
+          var threshold = iAttrs.threshold || 0.2;
+          return durationToPixels(adapter.viewport.width()
+            , timelineController.duration()
+            , threshold * timelineController.duration());
         }
 
         function scrollHandler() {
-          var msScrolled;
+          var delta;
 
-          pxScrolled = pxScrolled + (viewport.scrollLeft() - lastScrollPosition);
-          msScrolled = timeDeltaScrolled(lastScrollPosition, viewport.scrollLeft());
+          delta = adapter.viewport.scrollLeft() - lastScrollLeft;
+          pixelsScrolled = pixelsScrolled + delta;
 
-          lastScrollPosition = viewport.scrollLeft();
-          timelineController.adjustTimelineWindow(msScrolled);
-
-          if (!$rootScope.$$phase && !isLoading) {
-            adjustBuffer(true);
+          if (pixelsScrolled > thresholdPixels()) {
+            loadingFn();
+            pixelsScrolled = 0;
           }
+          lastScrollLeft = adapter.viewport.scrollLeft();
         }
 
-        function resizeHandler() {
-
+        function reload() {
+          pixelsScrolled = 0;
+          lastScrollLeft = 0;
         }
 
+        initialize();
         scope.$on('timelineScrolled', scrollHandler);
-        scope.$on('timelineResized', resizeHandler);
-        
-        // Refresh the whole screen if the datasource changes and updates
-        // its revision property. Maybe overkill? Merge changes?
         scope.$watch(datasource.revision, reload);
-
-        function generateItemScope(itemData) {
-          var itemScope
-            , prop;
-
-          itemScope = scope.$new();
-          for (prop in itemData) {
-            if (itemData.hasOwnProperty(prop)) {
-              itemScope[prop] = itemData[prop];
-            }
-          }
-
-          return itemScope;
-        }
-
-        function insertIndex(item) {
-          var i;
-          for (i = 0; i < buffer.length; i++) {
-            if (buffer[i].scope.start > item.start) {
-              break;
-            }
-          }
-          return i;
-        }
-
-        function sizeTimelineEvent(startTime, endTime, element) {
-          var duration;
-          duration = endTime - startTime;
-          element.css('display', 'block');
-          element.width(durationToPixels(viewport.width()
-            , timelineController.duration(), duration));
-          return element;
-        }
-
-        function positionTimelineEvent(startTime, element) {
-          var offsetDuration
-            , offsetPixels;
-          offsetDuration = startTime - timelineController.bufferStart();
-          offsetPixels = durationToPixels(viewport.width()
-            , timelineController.duration(), offsetDuration);
-          element.css({'left': offsetPixels + 'px', position: 'absolute'});
-          return element;
-        }
-
-        function insert(item) {
-          var itemScope
-            , index
-            , toBeAppended
-            , wrapper;
-
-          itemScope = generateItemScope(item);
-          index = insertIndex(item);
-          toBeAppended = index > 0;
-          wrapper = {
-            scope: itemScope
-          };
-
-          linker(itemScope, function(clone) {
-            clone = sizeTimelineEvent(itemScope.start, itemScope.end, clone);
-            clone = positionTimelineEvent(itemScope.start, clone);
-            wrapper.element = clone;
-
-            if (toBeAppended) {
-              if (index === buffer.length) {
-                channel.append(clone);
-                buffer.push(wrapper);
-              } else {
-                buffer[index].element.after(clone);
-                buffer.splice(index, 0, wrapper);
-              }
-            } else {
-              channel.prepend(clone);
-              buffer.unshift(wrapper);
-            }
-          });
-
-          return {
-            appended: toBeAppended
-          , wrapper: wrapper
-          };
-        }
-
-        /*
-        Each time we scroll we enqueue the captured event as a fetch
-        call in our pending queue. finalize() will reduce this queue
-        in order until it's empty
-         */
-        function enqueueFetch(scrollingForwards, scrolling) {
-          if (!isLoading) {
-            isLoading = true;
-            loadingFn(true);
-          }
-          // Kick off the fetch/finalize calls if we are adding to
-          // an empty queue. If the queue has content, then we are
-          // already doing this.
-          if (pending.push(scrollingForwards) === 1) {
-            return fetch(scrolling);
-          }
-        }
-
-        function fetchForwards(scrolling) {
-          if (buffer.length && !shouldLoadAfter()) {
-            return finalize(scrolling);
-          }
-
-          return datasource.get(latestLoaded || timelineController.bufferStart(), timelineController.bufferEnd()
-          , function(events) {
-            var newItems = [];
-            // Clip off earlier items
-            clipBefore();
-
-            events.forEach(function(evt) {
-              newItems.push(insert(evt));
-            });
-
-            latestLoaded = timelineController.bufferEnd();
-            return finalize(scrolling, newItems);
-          });
-        }
-
-        function fetchBackwards(scrolling) {
-
-          if (buffer.length && !shouldLoadBefore()) {
-            return finalize(scrolling);
-          }
-
-          return datasource.get(earliestLoaded || timelineController.bufferEnd(), timelineController.bufferStart(), function(events) {
-            var newItems = [];
-            // Clip off later items
-            clipAfter();
-
-            events.forEach(function(evt) {
-              newItems.unshift(evt);
-            });
-
-            earliestLoaded = timelineController.bufferStart();
-            return finalize(scrolling, newItems);
-          });
-        }
-
-        /*
-        Fetch does the actual work of getting new data from the
-        datasource service, by calling its get function
-        The get function should have the signature get(start, end, cb)
-         */
-        function fetch(scrolling) {
-          var scrollingForwards;
-
-          // Grab the front element in the pending queue
-          scrollingForwards = pending[0];
-
-          // We load forwards or backward in time based on the scroll direction
-          if (scrollingForwards) {
-            fetchForwards(scrolling);
-          } else {
-            fetchBackwards(scrolling);
-          }
-        }
-
-        /*
-        Finalize processes items loaded by a call to fetch and adjusts
-        the buffer for of timeline events accordingly. If there are
-        still pending scroll events, finalize will call fetch again -
-        these two functions call each other until the pending stack
-        is empty.
-         */
-        function finalize(scrolling, newItems) {
-          return adjustBuffer(scrolling, newItems, function() {
-            pending.shift();
-            if (pending.length === 0) {
-              isLoading = false;
-              return loadingFn(false);
-            } else {
-              return fetch(scrolling);
-            }
-          });
-        }
-        
-        function adjustAdapterWidth(pxScrolled) {
-          var scrollingBack;
-
-          if (pxScrolled === 0) {
-            return;
-          }
-
-          // Positive pixels means scrolling forwards, negative backwards
-          scrollingBack = pxScrolled < 0;
-          pxScrolled = Math.abs(pxScrolled);
-          channel.width(channel.width() + pxScrolled);
-
-          if (scrollingBack) {
-//            adapter.beforePadding(Math.min(adapter.beforePadding() - pxScrolled, 0));
-//            adapter.afterPadding(adapter.afterPadding() + pxScrolled);
-//            viewport.scrollLeft(viewport.scrollLeft() + pxScrolled);
-          } else {
-//            adapter.beforePadding(adapter.beforePadding() + pxScrolled);
-//            adapter.afterPadding(Math.min(adapter.afterPadding() - pxScrolled, 0));
-//            viewport.scrollLeft(viewport.scrollLeft() - pxScrolled);
-          }
-
-          // reset pxScrolled to 0 once we've applied it to the adapter padding
-          pxScrolled = 0;
-        }
-        
-        function adjustBuffer(scrolling, newItems, finalize) {
-          function doAdjustment() {
-            if (shouldLoadAfter()) {
-              enqueueFetch(true, scrolling);
-            }
-            if (shouldLoadBefore()) {
-              enqueueFetch(false, scrolling);
-            }
-            
-            if (finalize) {
-              return finalize();
-            }
-          }
-
-          if (newItems) {
-            adjustAdapterWidth(pxScrolled);
-            pxScrolled = 0;
-            return doAdjustment();
-          } else {
-            return doAdjustment();
-          }
-        }
-
+        adapter = buildAdapter();
+        loadingFn = datasource.loading || function() {};
       }
     }
   };
