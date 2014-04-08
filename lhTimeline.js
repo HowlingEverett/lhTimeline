@@ -12,7 +12,7 @@ lhTimeline.filter('durationToPixels', function() {
       , elementWidth;
 
     if (!(arguments.length === 3 || arguments.length === 4)) {
-      throw new Error('durationToPixels(viewportWidth, totalDuration, elementDuration, [bufferDuration])');
+      throw new Error('durationToPixels(viewportWidth, visibleDuration, elementDuration, [bufferDuration])');
     }
 
     widthValue = Number(viewportWidth);
@@ -162,6 +162,7 @@ lhTimeline.controller('TimelineController', function($scope, $element, $attrs) {
 
   $scope.threshold = $attrs.threshold || 0.2;
 
+
   return $scope;
 });
 
@@ -181,10 +182,11 @@ lhTimeline.directive('lhTimelineViewport', function() {
   , link: function($scope, $element, $attrs, timelineController) {
       var pixelsScrolled
         , lastScrollLeft
-        , scrollAdapter
+        , adapter
         , leftOffset
         , rightOffset
-        , durationToPixels = $filter('durationToPixels');
+        , durationToPixels = $filter('durationToPixels')
+        , pixelsToDuration = $filter('pixelsToDuration');
 
       function scrollViewBufferedSize() {
         var visibleDuration
@@ -206,8 +208,43 @@ lhTimeline.directive('lhTimelineViewport', function() {
           , threshold * timelineController.duration());
       }
 
-      function adapterWidth() {
-        return leftOffset + scrollViewBufferedSize() + rightOffset;
+      function buildAdapter() {
+        var midnight
+          , midnightTomorrow
+          , pixelWidth
+          , el;
+
+        midnight = new Date();
+        midnight.setHours(0);
+        midnight.setMinutes(0);
+        midnight.setSeconds(0);
+        midnight.setMilliseconds(0);
+        midnightTomorrow = new Date(midnight.getTime() + 86400000);
+
+        pixelWidth = durationToPixels($element.width(), timelineController.duration(), 86400000);
+        el = $element.find('.timeline_content_wrapper');
+        el.width(pixelWidth);
+        timelineController.startOfTime = midnight;
+        timelineController.endOfTime = midnightTomorrow;
+        return {
+          start: midnight
+        , end: midnightTomorrow
+        , width: pixelWidth
+        , element: el
+        };
+
+      }
+
+      function updateDataBounds(pixelsScrolled) {
+        var newStart
+          , newEnd
+          , deltaMs;
+
+        deltaMs = pixelsToDuration($element.width()
+          , timelineController.duration(), pixelsScrolled);
+        newStart = new Date(timelineController.start().getTime() + deltaMs);
+        newEnd = new Date(timelineController.end().getTime() + deltaMs);
+        timelineController.setTimelineBounds(newStart, newEnd);
       }
 
       function scrollHandler() {
@@ -217,62 +254,27 @@ lhTimeline.directive('lhTimelineViewport', function() {
         pixelsScrolled = pixelsScrolled + delta;
 
         if (Math.abs(pixelsScrolled) > thresholdPixels()) {
-          recentreContent(pixelsScrolled);
+          updateDataBounds(pixelsScrolled);
           $scope.$broadcast('timelineScrolled', pixelsScrolled);
           pixelsScrolled = 0;
         }
         lastScrollLeft = $element.scrollLeft();
       }
 
-      function recentreContent(pixelsScrolled) {
-        var scrollingForward
-          , pixelsToGrow;
-
-        if (pixelsScrolled === 0) {
-          return;
-        }
-
-        scrollingForward = pixelsScrolled > 0;
-        if (scrollingForward) {
-          // We need to grow the adapter if there is no right offset left after scrolling
-          pixelsToGrow = Math.abs(rightOffset - pixelsScrolled);
-          // Now shrink the right offset by the pixels scrolled, bounded to 0
-          rightOffset = Math.max(rightOffset - pixelsScrolled, 0);
-          // And expand the left offset by pixelsScrolled
-          leftOffset = leftOffset + pixelsScrolled;
-        } else {
-          // We need to grow the adapter if there is no left offset left
-          pixelsToGrow = Math.abs(leftOffset - Math.abs(pixelsScrolled));
-          leftOffset = Math.max(leftOffset - Math.abs(pixelsScrolled), 0);
-          rightOffset = rightOffset + Math.abs(pixelsScrolled);
-        }
-
-        // If we need to expand the scroll adapter, do so
-        if (pixelsToGrow) {
-          scrollAdapter.width(scrollAdapter.width() + pixelsToGrow);
-        }
-        // Apply the offsets as padding in the adapter
-        scrollAdapter.css('padding-right', rightOffset + 'px');
-        scrollAdapter.css('padding-left', leftOffset + 'px');
-      }
-
-      function resizeHandler() {
-        $element.css('width', scrollViewBufferedSize());
-        $scope.$broadcast('timelineResized', $element.prop('width')
-          , $element.prop('height'));
-      }
-
       function setupElements() {
         leftOffset = 0;
         rightOffset = 0;
+        adapter = buildAdapter();
+        var startLeft = durationToPixels($element.width()
+          , timelineController.duration()
+          , timelineController.start() - adapter.start);
+
         $element.css({overflow: 'scroll', display: 'block'});
-        scrollAdapter = $element.find('.timeline_content_wrapper');
-        scrollAdapter.width(adapterWidth());
+        $element.scrollLeft(startLeft);
       }
 
       setupElements();
       $element.on('scroll', scrollHandler);
-      $element.parent().on('resize', resizeHandler);
       lastScrollLeft = $element.scrollLeft();
       pixelsScrolled = 0;
     }
@@ -299,6 +301,8 @@ lhTimeline.directive('lhTimelineViewport', function() {
           , datasourceName
           , loading
           , loadingFn
+          , earliestLoaded
+          , latestLoaded
           , durationToPixels = $filter('durationToPixels');
 
         function initialize() {
@@ -359,6 +363,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
         function scrollHandler() {
           loadingFn();
+          fetch();
         }
 
         function resizeHandler() {
@@ -367,6 +372,34 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
         function reload() {
           loading = false;
+          earliestLoaded = timelineController.endOfTime;
+          latestLoaded = timelineController.startOfTime;
+          fetch();
+        }
+
+        function fetch() {
+          var bufferStart = timelineController.bufferStart()
+            , bufferEnd = timelineController.bufferEnd()
+            , fetchStart
+            , fetchEnd;
+
+
+          if (bufferStart < earliestLoaded) {
+            fetchStart = earliestLoaded = bufferStart;
+          } else {
+            fetchStart = latestLoaded;
+          }
+          if (bufferEnd > latestLoaded) {
+            fetchEnd = latestLoaded = bufferEnd;
+          } else {
+            fetchEnd = earliestLoaded;
+          }
+
+          if (fetchStart < fetchEnd) {
+            datasource.get(fetchStart, fetchEnd, function(newItems) {
+              console.log(newItems);
+            });
+          }
         }
 
         initialize();
