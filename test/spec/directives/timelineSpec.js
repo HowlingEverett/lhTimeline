@@ -331,7 +331,7 @@ describe('lhTimeline module', function() {
         , revision: 0
         };
         scope.datasource = datasource;
-        tmpl = $compile('<lh-timeline-viewport visible-minutes="10"><lh-timeline-channel><div lh-timeline-repeat="item in datasource" threshold="0.3">{{title}}</div></lh-timeline-channel></lh-timeline-viewport>')(scope);
+        tmpl = $compile('<lh-timeline-viewport visible-minutes="10" threshold="0.3"><lh-timeline-channel><div lh-timeline-repeat="item in datasource">{{title}}</div></lh-timeline-channel></lh-timeline-viewport>')(scope);
         scope.$digest();
         $('body').height(800).append(tmpl);
         viewport = tmpl.find('.timeline_viewport');
@@ -398,8 +398,30 @@ describe('lhTimeline module', function() {
       expect(called).toBeTruthy();
     });
 
-    it('should resize the padding to extend the scroll area past the scroll threshold', function() {
+    it('should add equivalent padding to the beginning when scrolling right past the threshold', function() {
+      var scrollPixels
+        , startPadding;
 
+      startPadding = tmpl.find('.timeline_repeat_padding.before');
+      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
+
+      expect(startPadding.width()).toEqual(0);
+      viewport.scrollLeft(scrollPixels);
+      viewport.triggerHandler('scroll');
+      expect(startPadding.width()).toEqual(scrollPixels);
+    });
+
+    it('should add equivalent padding to the end when scrolling left past the threshold', function() {
+      var scrollPixels
+        , endPadding;
+
+      endPadding = tmpl.find('.timeline_repeat_padding.after');
+      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
+
+      expect(endPadding.width()).toEqual(0);
+      viewport.scrollLeft(scrollPixels);
+      viewport.triggerHandler('scroll');
+      expect(endPadding.width()).toEqual(scrollPixels);
     });
   });
 });

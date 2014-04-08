@@ -160,6 +160,8 @@ lhTimeline.controller('TimelineController', function($scope, $element, $attrs) {
     return $element.find('.timeline_viewport');
   };
 
+  $scope.threshold = $attrs.threshold || 0.2;
+
   return $scope;
 });
 
@@ -177,31 +179,102 @@ lhTimeline.directive('lhTimelineViewport', function() {
     restrict: 'A'
   , require: '^lhTimelineViewport'
   , link: function($scope, $element, $attrs, timelineController) {
+      var pixelsScrolled
+        , lastScrollLeft
+        , scrollAdapter
+        , leftOffset
+        , rightOffset
+        , durationToPixels = $filter('durationToPixels');
 
       function scrollViewBufferedSize() {
-        var durationToPixels
-          , visibleDuration
+        var visibleDuration
           , viewportWidth
           , scrollViewWidth;
 
-        durationToPixels = $filter('durationToPixels');
+
         visibleDuration = timelineController.duration();
-        viewportWidth = $element.parent().css('width');
+        viewportWidth = $element.width();
         scrollViewWidth = durationToPixels(viewportWidth
           , visibleDuration, visibleDuration + (timelineController.buffer() * 2));
         return scrollViewWidth;
       }
 
-      $element.css({overflow: 'scroll', display: 'block'});
-      $element.on('scroll', function() {
-        $scope.$broadcast('timelineScrolled', $element.prop('scrollLeft')
-          , $element.prop('scrollTop'));
-      });
-      $element.parent().on('resize', function() {
+      function thresholdPixels() {
+        var threshold = timelineController.threshold || 0.2;
+        return durationToPixels($element.width()
+          , timelineController.duration()
+          , threshold * timelineController.duration());
+      }
+
+      function adapterWidth() {
+        return leftOffset + scrollViewBufferedSize() + rightOffset;
+      }
+
+      function scrollHandler() {
+        var delta;
+
+        delta = $element.scrollLeft() - lastScrollLeft;
+        pixelsScrolled = pixelsScrolled + delta;
+
+        if (Math.abs(pixelsScrolled) > thresholdPixels()) {
+          recentreContent(pixelsScrolled);
+          $scope.$broadcast('timelineScrolled', pixelsScrolled);
+          pixelsScrolled = 0;
+        }
+        lastScrollLeft = $element.scrollLeft();
+      }
+
+      function recentreContent(pixelsScrolled) {
+        var scrollingForward
+          , pixelsToGrow;
+
+        if (pixelsScrolled === 0) {
+          return;
+        }
+
+        scrollingForward = pixelsScrolled > 0;
+        if (scrollingForward) {
+          // We need to grow the adapter if there is no right offset left after scrolling
+          pixelsToGrow = Math.abs(rightOffset - pixelsScrolled);
+          // Now shrink the right offset by the pixels scrolled, bounded to 0
+          rightOffset = Math.max(rightOffset - pixelsScrolled, 0);
+          // And expand the left offset by pixelsScrolled
+          leftOffset = leftOffset + pixelsScrolled;
+        } else {
+          // We need to grow the adapter if there is no left offset left
+          pixelsToGrow = Math.abs(leftOffset - Math.abs(pixelsScrolled));
+          leftOffset = Math.max(leftOffset - Math.abs(pixelsScrolled), 0);
+          rightOffset = rightOffset + Math.abs(pixelsScrolled);
+        }
+
+        // If we need to expand the scroll adapter, do so
+        if (pixelsToGrow) {
+          scrollAdapter.width(scrollAdapter.width() + pixelsToGrow);
+        }
+        // Apply the offsets as padding in the adapter
+        scrollAdapter.css('padding-right', rightOffset + 'px');
+        scrollAdapter.css('padding-left', leftOffset + 'px');
+      }
+
+      function resizeHandler() {
         $element.css('width', scrollViewBufferedSize());
         $scope.$broadcast('timelineResized', $element.prop('width')
           , $element.prop('height'));
-      });
+      }
+
+      function setupElements() {
+        leftOffset = 0;
+        rightOffset = 0;
+        $element.css({overflow: 'scroll', display: 'block'});
+        scrollAdapter = $element.find('.timeline_content_wrapper');
+        scrollAdapter.width(adapterWidth());
+      }
+
+      setupElements();
+      $element.on('scroll', scrollHandler);
+      $element.parent().on('resize', resizeHandler);
+      lastScrollLeft = $element.scrollLeft();
+      pixelsScrolled = 0;
     }
   }
 }).directive('lhTimelineChannel', function() {
@@ -211,7 +284,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
   , replace: true
   , templateUrl: 'views/timeline_channel.html'
   }
-}).directive('lhTimelineRepeat', function($injector, $window, $filter, $rootScope, $timeout) {
+}).directive('lhTimelineRepeat', function($injector, $window, $filter) {
   return {
     restrict: 'A'
   , priority: 1000
@@ -221,14 +294,11 @@ lhTimeline.directive('lhTimelineViewport', function() {
   , compile: function() {
       return function(scope, iElement, iAttrs, timelineController, linker) {
         var datasource
-          , wrapper
           , adapter
           , match
           , datasourceName
           , loading
           , loadingFn
-          , pixelsScrolled
-          , lastScrollLeft
           , durationToPixels = $filter('durationToPixels');
 
         function initialize() {
@@ -275,10 +345,6 @@ lhTimeline.directive('lhTimelineViewport', function() {
           channel = getChannel();
           viewport = getViewport();
 
-          channel.wrap('<div class="timeline_repeat_wrapper" />');
-          channel.before('<div class="timeline_repeat_padding before" />');
-          channel.after('<div class="timeline_repeat_padding after" />');
-
           return {
             channel: channel
           , viewport: viewport
@@ -291,39 +357,23 @@ lhTimeline.directive('lhTimelineViewport', function() {
           };
         }
 
-        function readjustVisibleTime() {
-
-        }
-
-        function thresholdPixels() {
-          var threshold = iAttrs.threshold || 0.2;
-          return durationToPixels(adapter.viewport.width()
-            , timelineController.duration()
-            , threshold * timelineController.duration());
-        }
-
         function scrollHandler() {
-          var delta;
+          loadingFn();
+        }
 
-          delta = adapter.viewport.scrollLeft() - lastScrollLeft;
-          pixelsScrolled = pixelsScrolled + delta;
+        function resizeHandler() {
 
-          if (pixelsScrolled > thresholdPixels()) {
-            loadingFn();
-            pixelsScrolled = 0;
-          }
-          lastScrollLeft = adapter.viewport.scrollLeft();
         }
 
         function reload() {
-          pixelsScrolled = 0;
-          lastScrollLeft = 0;
+          loading = false;
         }
 
         initialize();
-        scope.$on('timelineScrolled', scrollHandler);
-        scope.$watch(datasource.revision, reload);
         adapter = buildAdapter();
+        scope.$on('timelineScrolled', scrollHandler);
+        scope.$on('timelineResized', resizeHandler);
+        scope.$watch(datasource.revision, reload);
         loadingFn = datasource.loading || function() {};
       }
     }
