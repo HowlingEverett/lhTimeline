@@ -39,7 +39,7 @@ lhTimeline.service('MockTimeline', function($rootScope, serviceUtils) {
   return channelService;
 });
 
-lhTimeline.service('MockChannel', function($rootScope, $timeout) {
+lhTimeline.service('MockChannel', function($rootScope) {
   var contentService
     , current
     , scope;
@@ -141,24 +141,42 @@ lhTimeline.service('MockChannel', function($rootScope, $timeout) {
     return list[index];
   }
   
-  function generateMockChannelItem(start, end) {
+//  function generateMockChannelItem(start, end) {
+//    var eventStart
+//      , eventDuration
+//      , eventEnd;
+//
+//    eventStart = new Date(getRandomInt(start.getTime(), end.getTime()));
+//    eventDuration = getRandomInt(10000, end - eventStart);
+//    eventEnd = new Date(eventStart.getTime() + eventDuration);
+//
+//    return {
+//      start: eventStart
+//    , duration: eventDuration
+//    , end: eventEnd
+//    };
+//  }
+
+  function generateMockChannelItem(start) {
     var eventStart
       , eventDuration
       , eventEnd;
-    
-    eventStart = new Date(getRandomInt(start.getTime(), end.getTime()));
-    eventDuration = getRandomInt(10000, end - eventStart);
+
+    eventStart = new Date(start.getTime());
+    eventStart.setSeconds(0);
+    eventStart.setMilliseconds(0);
+    eventDuration = 60000;
     eventEnd = new Date(eventStart.getTime() + eventDuration);
-    
+
     return {
       start: eventStart
+    , end : eventEnd
     , duration: eventDuration
-    , end: eventEnd
     };
   }
   
   function incrementTime(eventStart, duration) {
-    return new Date(eventStart.getTime() + duration + 10000);
+    return new Date(eventStart.getTime() + duration + 60000);
   }
   
   function generateMockData(channelType, start, end) {
