@@ -245,6 +245,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
         newStart = new Date(timelineController.start().getTime() + deltaMs);
         newEnd = new Date(timelineController.end().getTime() + deltaMs);
         timelineController.setTimelineBounds(newStart, newEnd);
+        console.log('updating Timeline window:', newStart, 'to', newEnd);
       }
 
       function scrollHandler() {
@@ -303,6 +304,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
           , loadingFn
           , earliestLoaded
           , latestLoaded
+          , repeats
           , durationToPixels = $filter('durationToPixels');
 
         function initialize() {
@@ -348,6 +350,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
           channel = getChannel();
           viewport = getViewport();
+          channel.css('position', 'relative');
 
           return {
             channel: channel
@@ -374,6 +377,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
           loading = false;
           earliestLoaded = timelineController.endOfTime;
           latestLoaded = timelineController.startOfTime;
+          repeats = [];
           fetch();
         }
 
@@ -397,9 +401,50 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
           if (fetchStart < fetchEnd) {
             datasource.get(fetchStart, fetchEnd, function(newItems) {
-              console.log(newItems);
+              newItems.forEach(insert);
             });
           }
+        }
+
+        function itemLeftOffset(itemData, viewport) {
+          var offset = itemData.start - timelineController.startOfTime;
+          return durationToPixels(viewport.width(), timelineController.duration(), offset);
+        }
+
+        function itemWidth(itemData, viewport) {
+          return durationToPixels(viewport.width(), timelineController.duration()
+            , itemData.duration);
+        }
+
+        function positionTimelineItem(itemScope, cloneElement, viewport) {
+          var left
+            , width;
+
+          width = itemWidth(itemScope, viewport);
+          left = itemLeftOffset(itemScope, viewport);
+          cloneElement.width(width);
+          cloneElement.css({left: left + 'px', position: 'absolute'});
+        }
+
+
+        function insert(timelineItem) {
+          var itemScope
+            , itemProp;
+
+          itemScope = scope.$new();
+          for (itemProp in timelineItem) {
+            if (timelineItem.hasOwnProperty(itemProp)) {
+              itemScope[itemProp] = timelineItem[itemProp];
+            }
+          }
+
+          linker(itemScope, function(clone) {
+            positionTimelineItem(itemScope, clone, adapter.viewport);
+            adapter.channel.append(clone);
+            repeats.push(clone);
+          });
+
+
         }
 
         initialize();

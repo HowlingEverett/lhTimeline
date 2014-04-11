@@ -8,7 +8,5 @@
 }
 
 .timeline_content {
-    display: inline-block;
-    margin-left: 24px;
-    background-color: darkgreen;
+    background-color: cyan;
 }
