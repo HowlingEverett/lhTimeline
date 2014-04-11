@@ -188,19 +188,6 @@ lhTimeline.directive('lhTimelineViewport', function() {
         , durationToPixels = $filter('durationToPixels')
         , pixelsToDuration = $filter('pixelsToDuration');
 
-      function scrollViewBufferedSize() {
-        var visibleDuration
-          , viewportWidth
-          , scrollViewWidth;
-
-
-        visibleDuration = timelineController.duration();
-        viewportWidth = $element.width();
-        scrollViewWidth = durationToPixels(viewportWidth
-          , visibleDuration, visibleDuration + (timelineController.buffer() * 2));
-        return scrollViewWidth;
-      }
-
       function thresholdPixels() {
         var threshold = timelineController.threshold || 0.2;
         return durationToPixels($element.width()
@@ -290,170 +277,160 @@ lhTimeline.directive('lhTimelineViewport', function() {
 }).directive('lhTimelineRepeat', function($injector, $window, $filter) {
   return {
     restrict: 'A'
-  , priority: 1000
-  , terminal: true
   , transclude: 'element'
   , require: '?^lhTimelineViewport'
-  , compile: function() {
-      return function(scope, iElement, iAttrs, timelineController, linker) {
-        var datasource
-          , adapter
-          , match
-          , datasourceName
-          , loading
-          , loadingFn
-          , earliestLoaded
-          , latestLoaded
-          , repeats
-          , durationToPixels = $filter('durationToPixels');
+  , link: function(scope, iElement, iAttrs, timelineController, linker) {
+      var datasource
+        , adapter
+        , match
+        , datasourceName
+        , loading
+        , loadingFn
+        , earliestLoaded
+        , latestLoaded
+        , repeats
+        , durationToPixels = $filter('durationToPixels');
 
-        function initialize() {
-          match = iAttrs.lhTimelineRepeat.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
-          if (!match) {
-            throw new Error('Expected lhTimeline directive in the form of "item in timelineService" but got "' +
-              iAttrs.lhTimeline + '"');
-          }
-          datasourceName = match[2];
+      function initialize() {
+        match = iAttrs.lhTimelineRepeat.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
+        if (!match) {
+          throw new Error('Expected lhTimeline directive in the form of "item in timelineService" but got "' +
+            iAttrs.lhTimeline + '"');
+        }
+        datasourceName = match[2];
 
-          function isDatasource(datasource) {
-            return angular.isObject(datasource) &&
-              datasource.get &&
-              angular.isFunction(datasource.get);
-          }
+        function isDatasource(datasource) {
+          return angular.isObject(datasource) &&
+            datasource.get &&
+            angular.isFunction(datasource.get);
+        }
 
-          datasource = scope[datasourceName];
+        datasource = scope[datasourceName];
 
+        if (!isDatasource(datasource)) {
+          datasource = $injector.get(datasourceName);
           if (!isDatasource(datasource)) {
-            datasource = $injector.get(datasourceName);
-            if (!isDatasource(datasource)) {
-              throw new Error(datasourceName + ' is not a valid datasource for the timeline');
-            }
+            throw new Error(datasourceName + ' is not a valid datasource for the timeline');
           }
         }
-
-        function buildAdapter() {
-          var channel
-            , viewport;
-
-          function getViewport() {
-            return timelineController.viewport() || $window;
-          }
-
-          function getChannel() {
-            var ch;
-            ch = iElement.parent();
-            if (ch && ch.hasClass('timeline_channel_content')) {
-              return ch;
-            }
-            return getViewport();
-          }
-
-          channel = getChannel();
-          viewport = getViewport();
-          channel.css('position', 'relative');
-
-          return {
-            channel: channel
-          , viewport: viewport
-          , moveBackwards: function() {
-
-            }
-          , moveForwards: function() {
-
-            }
-          };
-        }
-
-        function scrollHandler() {
-          loadingFn();
-          fetch();
-        }
-
-        function resizeHandler() {
-
-        }
-
-        function reload() {
-          loading = false;
-          earliestLoaded = timelineController.endOfTime;
-          latestLoaded = timelineController.startOfTime;
-          repeats = [];
-          fetch();
-        }
-
-        function fetch() {
-          var bufferStart = timelineController.bufferStart()
-            , bufferEnd = timelineController.bufferEnd()
-            , fetchStart
-            , fetchEnd;
-
-
-          if (bufferStart < earliestLoaded) {
-            fetchStart = earliestLoaded = bufferStart;
-          } else {
-            fetchStart = latestLoaded;
-          }
-          if (bufferEnd > latestLoaded) {
-            fetchEnd = latestLoaded = bufferEnd;
-          } else {
-            fetchEnd = earliestLoaded;
-          }
-
-          if (fetchStart < fetchEnd) {
-            datasource.get(fetchStart, fetchEnd, function(newItems) {
-              newItems.forEach(insert);
-            });
-          }
-        }
-
-        function itemLeftOffset(itemData, viewport) {
-          var offset = itemData.start - timelineController.startOfTime;
-          return durationToPixels(viewport.width(), timelineController.duration(), offset);
-        }
-
-        function itemWidth(itemData, viewport) {
-          return durationToPixels(viewport.width(), timelineController.duration()
-            , itemData.duration);
-        }
-
-        function positionTimelineItem(itemScope, cloneElement, viewport) {
-          var left
-            , width;
-
-          width = itemWidth(itemScope, viewport);
-          left = itemLeftOffset(itemScope, viewport);
-          cloneElement.width(width);
-          cloneElement.css({left: left + 'px', position: 'absolute'});
-        }
-
-
-        function insert(timelineItem) {
-          var itemScope
-            , itemProp;
-
-          itemScope = scope.$new();
-          for (itemProp in timelineItem) {
-            if (timelineItem.hasOwnProperty(itemProp)) {
-              itemScope[itemProp] = timelineItem[itemProp];
-            }
-          }
-
-          linker(itemScope, function(clone) {
-            positionTimelineItem(itemScope, clone, adapter.viewport);
-            adapter.channel.append(clone);
-            repeats.push(clone);
-          });
-
-
-        }
-
-        initialize();
-        adapter = buildAdapter();
-        scope.$on('timelineScrolled', scrollHandler);
-        scope.$on('timelineResized', resizeHandler);
-        scope.$watch(datasource.revision, reload);
-        loadingFn = datasource.loading || function() {};
       }
+
+      function buildAdapter() {
+        var channel
+          , viewport;
+
+        function getViewport() {
+          return timelineController.viewport() || $window;
+        }
+
+        function getChannel() {
+          var ch;
+          ch = iElement.parent();
+          if (ch && ch.hasClass('timeline_channel_content')) {
+            return ch;
+          }
+          return getViewport();
+        }
+
+        channel = getChannel();
+        viewport = getViewport();
+        channel.css('position', 'relative');
+
+        return {
+          channel: channel
+        , viewport: viewport
+        };
+      }
+
+      function scrollHandler() {
+        loadingFn(true);
+        fetch();
+        scope.$apply();
+      }
+
+      function resizeHandler() {
+
+      }
+
+      function reload() {
+        loading = false;
+        earliestLoaded = timelineController.endOfTime;
+        latestLoaded = timelineController.startOfTime;
+        repeats = [];
+        fetch();
+      }
+
+      function fetch() {
+        var bufferStart = timelineController.bufferStart()
+          , bufferEnd = timelineController.bufferEnd()
+          , fetchStart
+          , fetchEnd
+          , earliest = earliestLoaded;
+
+
+        if (bufferStart < earliestLoaded) {
+          fetchStart = earliestLoaded = bufferStart;
+        } else {
+          fetchStart = latestLoaded;
+        }
+        if (bufferEnd > latestLoaded) {
+          fetchEnd = latestLoaded = bufferEnd;
+        } else {
+          fetchEnd = earliest;
+        }
+
+        if (fetchStart < fetchEnd) {
+          datasource.get(fetchStart, fetchEnd, function(newItems) {
+            newItems.forEach(insert);
+          });
+        }
+      }
+
+      function itemLeftOffset(itemData, viewport) {
+        var offset = itemData.start - timelineController.startOfTime;
+        return durationToPixels(viewport.width(), timelineController.duration(), offset);
+      }
+
+      function itemWidth(itemData, viewport) {
+        return durationToPixels(viewport.width(), timelineController.duration()
+          , itemData.duration);
+      }
+
+      function positionTimelineItem(itemScope, cloneElement, viewport) {
+        var left
+          , width;
+
+        width = itemWidth(itemScope, viewport);
+        left = itemLeftOffset(itemScope, viewport);
+        cloneElement.width(width);
+        cloneElement.css({left: left + 'px', position: 'absolute'});
+      }
+
+
+      function insert(timelineItem) {
+        var itemScope
+          , itemProp;
+
+        itemScope = scope.$new();
+        for (itemProp in timelineItem) {
+          if (timelineItem.hasOwnProperty(itemProp)) {
+            itemScope[itemProp] = timelineItem[itemProp];
+          }
+        }
+
+        linker(itemScope, function(clone) {
+          positionTimelineItem(itemScope, clone, adapter.viewport);
+          adapter.channel.append(clone);
+          repeats.push(clone);
+        });
+      }
+
+      initialize();
+      adapter = buildAdapter();
+      scope.$on('timelineScrolled', scrollHandler);
+      scope.$on('timelineResized', resizeHandler);
+      scope.$watch(datasource.revision, reload);
+      loadingFn = datasource.loading || function() {};
     }
-  };
+  }
 });
