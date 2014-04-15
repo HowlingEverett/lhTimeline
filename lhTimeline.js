@@ -324,6 +324,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
     restrict: 'A'
   , transclude: 'element'
   , require: '?^lhTimelineViewport'
+  , scope: {}
   , link: function(scope, iElement, iAttrs, timelineController, linker) {
       var datasource
         , adapter
@@ -334,7 +335,8 @@ lhTimeline.directive('lhTimelineViewport', function() {
         , earliestLoaded
         , latestLoaded
         , repeats
-        , durationToPixels = $filter('durationToPixels');
+        , durationToPixels = $filter('durationToPixels')
+        , contentIdentifier;
 
       function initialize() {
         match = iAttrs.lhTimelineRepeat.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
@@ -358,6 +360,8 @@ lhTimeline.directive('lhTimelineViewport', function() {
             throw new Error(datasourceName + ' is not a valid datasource for the timeline');
           }
         }
+
+        contentIdentifier = iAttrs.contentIdentifier;
       }
 
       function buildAdapter() {
@@ -424,10 +428,16 @@ lhTimeline.directive('lhTimelineViewport', function() {
           fetchEnd = earliest;
         }
 
+        function fetchResult(newItems) {
+          newItems.forEach(insert);
+        }
+
         if (fetchStart < fetchEnd) {
-          datasource.get(fetchStart, fetchEnd, function(newItems) {
-            newItems.forEach(insert);
-          });
+          if (contentIdentifier) {
+            datasource.get(fetchStart, fetchEnd, contentIdentifier, fetchResult);
+          } else {
+            datasource.get(fetchStart, fetchEnd, fetchResult);
+          }
         }
       }
 
@@ -437,6 +447,10 @@ lhTimeline.directive('lhTimelineViewport', function() {
       }
 
       function itemWidth(itemData, viewport) {
+        if (!itemData.duration) {
+          return adapter.channel.height();
+        }
+
         return durationToPixels(viewport.width(), timelineController.duration()
           , itemData.duration);
       }

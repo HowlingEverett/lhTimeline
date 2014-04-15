@@ -62,9 +62,9 @@ lhTimeline.service('MockChannel', function($rootScope) {
       locationContent = generateMockData('location', start, end);
       
       return {
-        channelId1: audioContent
-      , channelId2: screenCapContent
-      , channelId3: locationContent
+        audio: audioContent
+      , screenCap: screenCapContent
+      , location: locationContent
       , default: audioContent
       };
     }

@@ -8,9 +8,19 @@
 <body ng-controller="lhTimelineDemoController">
 
     <lh-timeline-viewport>
+        <lh-timeline-channel class="channel_1">
+            <div class="timeline_content" lh-timeline-repeat="item in MockChannel" content-identifier="screenCap">
+                {{start}} - {{filename}}
+            </div>
+        </lh-timeline-channel>
         <lh-timeline-channel>
-            <div class="timeline_content" lh-timeline-repeat="item in MockChannel">
-                {{start}}
+            <div class="timeline_content" lh-timeline-repeat="item in MockChannel" content-identifier="location">
+                {{start}} - {{label}}
+            </div>
+        </lh-timeline-channel>
+        <lh-timeline-channel>
+            <div class="timeline_content" lh-timeline-repeat="item in MockChannel" content-identifier="audio">
+                {{start}} - {{filename}}
             </div>
         </lh-timeline-channel>
     </lh-timeline-viewport>
