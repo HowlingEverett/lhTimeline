@@ -123,13 +123,7 @@ describe('lhTimeline module', function() {
     }));
 
     beforeEach(function() {
-      scope.channel = {
-        title: 'Test channel 1'
-      , glyphicon: 'headphones'
-      , type: 'audio'
-      };
-
-      tmpl = $compile('<lh-timeline-channel></lh-timeline-channel>')(scope);
+      tmpl = $compile('<lh-timeline-channel title="Test channel 1" glyphicon="headphones"></lh-timeline-channel>')(scope);
       scope.$digest();
     });
 
@@ -138,7 +132,7 @@ describe('lhTimeline module', function() {
         , icon;
 
       title = tmpl.find('span.channel_title').text();
-      expect(title).toBe(scope.channel.title);
+      expect(title).toBe('Test channel 1');
       icon = tmpl.find('span.channel_glyphicon');
       expect(icon.hasClass('glyphicon_headphones')).toBe(true);
     });

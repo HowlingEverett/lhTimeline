@@ -317,6 +317,10 @@ lhTimeline.directive('lhTimelineViewport', function() {
     restrict: 'E'
   , transclude: true
   , replace: true
+  , scope: {
+      title: '@'
+    , glyphicon: '@'
+    }
   , templateUrl: 'views/timeline_channel.html'
   }
 }).directive('lhTimelineRepeat', function($injector, $window, $filter) {
