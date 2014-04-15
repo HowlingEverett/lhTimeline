@@ -11,6 +11,7 @@ lhTimeline.filter('durationToPixels', function() {
       , unitPerMs
       , elementWidth;
 
+
     if (!(arguments.length === 3 || arguments.length === 4)) {
       throw new Error('durationToPixels(viewportWidth, visibleDuration, elementDuration, [bufferDuration])');
     }
@@ -105,12 +106,44 @@ lhTimeline.controller('TimelineController', function($scope, $element, $attrs) {
   var start
     , end
     , visibleMinutes
-    , TEN_MINUTES = 600000
-    , ONE_MINUTE = 60000;
+    , ONE_MINUTE = 60000
 
-  end = $attrs.end || new Date(); // Defaults to 'now' if not set
-  start = $attrs.start || new Date(end.getTime() - TEN_MINUTES); // Defaults to 10min ago
-  visibleMinutes = $attrs.visibleMinutes || 10;
+
+  visibleMinutes = +$attrs.visibleMinutes || 10;
+
+  function initialiseBounds() {
+    var _midnight;
+
+    _midnight = new Date();
+    _midnight.setHours(0);
+    _midnight.setMinutes(0);
+    _midnight.setSeconds(0);
+    _midnight.setMilliseconds(0);
+
+    if ($attrs.end) {
+      end = new Date($attrs.end);
+    } else {
+      end = new Date();
+    }
+
+    if ($attrs.start) {
+      start = new Date($attrs.start);
+    } else {
+      start = new Date(end.getTime() - (visibleMinutes * ONE_MINUTE));
+    }
+
+    if ($attrs.startOfTime) {
+      $scope.startOfTime = new Date($attrs.startOfTime);
+    } else {
+      $scope.startOfTime = _midnight;
+    }
+
+    if ($attrs.endOfTime) {
+      $scope.endOfTime = new Date($attrs.endOfTime);
+    } else {
+      $scope.endOfTime = new Date($scope.startOfTime.getTime() + 86400000);
+    }
+  }
 
   $scope.buffer = function() {
     var bufferMinutes;
@@ -162,6 +195,7 @@ lhTimeline.controller('TimelineController', function($scope, $element, $attrs) {
 
   $scope.threshold = $attrs.threshold || 0.2;
 
+  initialiseBounds();
 
   return $scope;
 });
@@ -232,7 +266,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
         newStart = new Date(timelineController.start().getTime() + deltaMs);
         newEnd = new Date(timelineController.end().getTime() + deltaMs);
         timelineController.setTimelineBounds(newStart, newEnd);
-        console.log('updating Timeline window:', newStart, 'to', newEnd);
+        console.info('updating Timeline window:', newStart, 'to', newEnd);
       }
 
       function scrollHandler() {
@@ -249,6 +283,16 @@ lhTimeline.directive('lhTimelineViewport', function() {
         lastScrollLeft = $element.scrollLeft();
       }
 
+      function resizeHandler() {
+        var el
+        , pixelWidth;
+
+        pixelWidth = durationToPixels($element.width(), timelineController.duration(), 86400000);
+        el = $element.find('.timeline_content_wrapper');
+        el.width(pixelWidth);
+        $scope.$broadcast('timelineResized', pixelWidth);
+      }
+
       function setupElements() {
         leftOffset = 0;
         rightOffset = 0;
@@ -263,6 +307,7 @@ lhTimeline.directive('lhTimelineViewport', function() {
 
       setupElements();
       $element.on('scroll', scrollHandler);
+      $element.on('resize', resizeHandler);
       lastScrollLeft = $element.scrollLeft();
       pixelsScrolled = 0;
     }

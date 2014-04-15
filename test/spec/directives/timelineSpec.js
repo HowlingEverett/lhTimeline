@@ -114,13 +114,13 @@ describe('lhTimeline module', function() {
     });
   });
 
-  beforeEach(inject(function(_$compile_, $rootScope) {
-    $compile = _$compile_;
-    scope = $rootScope.$new();
-  }));
-
   describe('lhTimelineChannel directive', function() {
     var tmpl;
+
+    beforeEach(inject(function(_$compile_, $rootScope) {
+      $compile = _$compile_;
+      scope = $rootScope.$new();
+    }));
 
     beforeEach(function() {
       scope.channel = {
@@ -139,18 +139,24 @@ describe('lhTimeline module', function() {
 
       title = tmpl.find('span.channel_title').text();
       expect(title).toBe(scope.channel.title);
-      icon = tmpl.find('span.glyphicon');
-      expect(icon.hasClass('glyphicon-headphones')).toBe(true);
+      icon = tmpl.find('span.channel_glyphicon');
+      expect(icon.hasClass('glyphicon_headphones')).toBe(true);
     });
   });
 
   describe('lhTimelineViewport directive', function() {
     var tmpl;
 
+    beforeEach(inject(function(_$compile_, $rootScope) {
+      $compile = _$compile_;
+      scope = $rootScope.$new();
+    }));
+
     beforeEach(function() {
       scope.title = 'Test timeline';
+      spyOn(scope, '$broadcast');
 
-      tmpl = $compile('<lh-timeline-viewport><div class="timeline_channels"></div></lh-timeline-viewport>')(scope);
+      tmpl = $compile('<lh-timeline-viewport threshold="0.1"><div class="timeline_channels"></div></lh-timeline-viewport>')(scope);
       scope.$digest();
     });
 
@@ -175,65 +181,93 @@ describe('lhTimeline module', function() {
       expect(tmpl.prop('tagName').toLowerCase()).toBe('div');
       expect(tmpl.hasClass('timeline')).toBe(true);
     });
-
-    it('should broadcast a scope event when the user scrolls the viewport', function() {
-      var content, viewport;
-      spyOn(scope, '$broadcast');
-      expect(scope.$broadcast).not.toHaveBeenCalled();
-      content = tmpl.find('.timeline_channels');
-      viewport = tmpl.find('.timeline_viewport');
-      content.css('width', '1000px');
-      viewport.css('width', '200px');
-
-      viewport.scrollLeft(800);
-      viewport.triggerHandler('scroll');
-      expect(scope.$broadcast).toHaveBeenCalledWith('timelineScrolled', 0, 0);
-    });
   });
 
   describe('lhTimelineScrollView directive', function() {
-    var $compile
-      , $scope
+    var tmpl
       , viewport
-      , scrollView;
+      , contentView
+      , durationToPixels;
 
     beforeEach(inject(function(_$compile_, $rootScope) {
       $compile = _$compile_;
-      $scope = $rootScope.$new();
-      $scope.title = 'test timeline';
-      viewport = $compile('<lh-timeline-viewport><div class="content">Test</div></lh-timeline-viewport>')($scope);
-      $scope.$digest();
-      viewport.css({width: '800px'});
-      viewport.trigger('resize');
-      scrollView = viewport.find('div.timeline_viewport');
+      scope = $rootScope.$new();
     }));
 
-    it('should be sized larger than the viewport based on the buffer', function() {
-      var viewportWidth
-        , scrollViewWidth;
-
-      viewportWidth = viewport.width();
-      scrollViewWidth = scrollView.width();
-      expect(scrollViewWidth).toBeGreaterThan(viewportWidth);
-      // Default buffer is 5 minutes either side, so we end up with
-      // double the width in this default case.
-      expect(scrollViewWidth).toEqual(1600);
-
-      viewport = $compile('<lh-timeline-viewport buffer-minutes="2">Test 2</lh-timeline-viewport>')($scope);
-      $scope.$digest();
-      scrollView = viewport.find('div.timeline_viewport');
+    beforeEach(inject(function($filter) {
+      spyOn(scope, '$broadcast');
+      scope.title = 'test timeline';
+      tmpl = $compile('<lh-timeline-viewport threshold="0.3" end="Tue Apr 15 2014 15:30:00 GMT+1000 (EST)" visible-minutes="10" start-of-time="Tue Apr 15 2014 00:00:00 GMT+1000 (EST)" end-of-time="Tue Apr 16 2014 00:00:00 GMT+1000 (EST)"><div class="content">Test</div></lh-timeline-viewport>')(scope);
+      scope.$digest();
+      viewport = tmpl.find('div.timeline_viewport');
       viewport.css({width: '800px'});
       viewport.trigger('resize');
-      expect(scrollView.width()).toEqual(1120);
+      contentView = viewport.find('.timeline_content_wrapper');
+      durationToPixels = $filter('durationToPixels');
+      scope.$broadcast.calls.reset();
+      $('body').append(tmpl);
+    }));
+
+    afterEach(function() {
+      tmpl.remove();
+    });
+
+    it('should be sized larger than the viewport', function() {
+      var viewportWidth
+        , contentViewWidth;
+
+      viewportWidth = viewport.width();
+      contentViewWidth = contentView.width();
+      expect(contentViewWidth).toBeGreaterThan(viewportWidth);
     });
 
     it('should resize itself when the viewport resizes', function() {
-      // Starting size
-      expect(scrollView.width()).toEqual(1600);
-
+      var visibleMs = 10 * 60000
+        , oneDayMs = 86400000
+        , oldPxSize
+        , newPxSize;
+      oldPxSize = durationToPixels(viewport.width(), visibleMs, oneDayMs);
+      expect(contentView.width()).toBe(oldPxSize);
       viewport.css({width: '1200px'});
       viewport.trigger('resize');
-      expect(scrollView.width()).toEqual(2400);
+      newPxSize = durationToPixels(viewport.width(), visibleMs, oneDayMs);
+      expect(scope.$broadcast).toHaveBeenCalledWith('timelineResized', newPxSize);
+      expect(contentView.width()).toBe(newPxSize);
+    });
+
+    it('should have a scroll threshold which triggers loading when scrolling a certain distance', function() {
+      var scrollPixels
+        , belowThreshold;
+
+      expect(scope.$broadcast).not.toHaveBeenCalled();
+
+      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
+      belowThreshold = scrollPixels / 2;
+      viewport.scrollLeft(belowThreshold);
+      viewport.triggerHandler('scroll');
+      expect(scope.$broadcast).not.toHaveBeenCalled();
+
+      viewport.scrollLeft(0);
+      viewport.triggerHandler('scroll');
+      viewport.scrollLeft(scrollPixels);
+      viewport.triggerHandler('scroll');
+      expect(scope.$broadcast).toHaveBeenCalledWith('timelineScrolled', scrollPixels);
+    });
+
+    it('should reset the scroll threshold each time it is triggered', function() {
+      var scrollPixels;
+
+
+
+      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
+      viewport.scrollLeft(scrollPixels);
+      viewport.triggerHandler('scroll');
+
+
+
+      viewport.scrollLeft(scrollPixels * 2);
+      viewport.triggerHandler('scroll');
+
     });
   });
 
@@ -317,17 +351,14 @@ describe('lhTimeline module', function() {
       , durationToPixels
       , datasource
       , viewport
-      , channel
-      , called; // We want to track the loadingFn callback, for some reason my spy is not working. Asynchronous? Not really
+      , channel;
 
     beforeEach(function() {
       inject(function($filter) {
         durationToPixels = $filter('durationToPixels');
         datasource = {
           get: function() {}
-        , loading: function() {
-            called = true;
-          }
+        , loading: function() {}
         , revision: 0
         };
         scope.datasource = datasource;
@@ -338,90 +369,11 @@ describe('lhTimeline module', function() {
         channel = tmpl.find('.timeline_channel_content');
         viewport.css({width: '800px', height: '30px'});
         channel.css({width: '3000px', height: '30px'});
-        called = false;
       });
     });
 
     afterEach(function() {
       tmpl.remove();
-    });
-
-    it('should create a wrapper and padding elements', function() {
-      var wrapper
-        , beforePadding
-        , afterPadding;
-
-      wrapper = tmpl.find('.timeline_repeat_wrapper');
-      expect(wrapper.children().length).toBe(3);
-      beforePadding = wrapper.children().eq(0);
-      afterPadding = wrapper.children().eq(2);
-      expect(beforePadding.length).toBe(1);
-      expect(beforePadding.prop('tagName').toLocaleLowerCase()).toEqual('div');
-      expect(beforePadding.hasClass('timeline_repeat_padding')).toBeTruthy();
-      expect(beforePadding.hasClass('before')).toBeTruthy();
-      expect(afterPadding.length).toBe(1);
-      expect(afterPadding.prop('tagName').toLocaleLowerCase()).toEqual('div');
-      expect(afterPadding.hasClass('timeline_repeat_padding')).toBeTruthy();
-      expect(afterPadding.hasClass('after')).toBeTruthy();
-    });
-
-    it('should have a scroll threshold which triggers loading when scrolling a certain distance', function() {
-      var scrollPixels
-        , belowThreshold;
-
-      expect(called).toBeFalsy();
-
-      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
-      belowThreshold = scrollPixels / 2;
-      viewport.scrollLeft(belowThreshold);
-      viewport.triggerHandler('scroll');
-      expect(called).toBeFalsy();
-
-      viewport.scrollLeft(scrollPixels);
-      viewport.triggerHandler('scroll');
-      expect(called).toBeTruthy();
-    });
-
-    it('should reset the scroll threshold each time it is triggered', function() {
-      var scrollPixels;
-
-      expect(called).toBeFalsy();
-
-      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
-      viewport.scrollLeft(scrollPixels);
-      viewport.triggerHandler('scroll');
-      expect(called).toBeTruthy();
-
-      called = false;
-      viewport.scrollLeft(scrollPixels * 2);
-      viewport.triggerHandler('scroll');
-      expect(called).toBeTruthy();
-    });
-
-    it('should add equivalent padding to the beginning when scrolling right past the threshold', function() {
-      var scrollPixels
-        , startPadding;
-
-      startPadding = tmpl.find('.timeline_repeat_padding.before');
-      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
-
-      expect(startPadding.width()).toEqual(0);
-      viewport.scrollLeft(scrollPixels);
-      viewport.triggerHandler('scroll');
-      expect(startPadding.width()).toEqual(scrollPixels);
-    });
-
-    it('should add equivalent padding to the end when scrolling left past the threshold', function() {
-      var scrollPixels
-        , endPadding;
-
-      endPadding = tmpl.find('.timeline_repeat_padding.after');
-      scrollPixels = durationToPixels(viewport.width(), 600000, 240000);
-
-      expect(endPadding.width()).toEqual(0);
-      viewport.scrollLeft(scrollPixels);
-      viewport.triggerHandler('scroll');
-      expect(endPadding.width()).toEqual(scrollPixels);
     });
   });
 });
