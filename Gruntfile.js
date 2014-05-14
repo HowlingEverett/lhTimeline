@@ -102,7 +102,7 @@ module.exports = function (grunt) {
 
   grunt.registerTask('serve', function() {
     grunt.task.run([
-      'bowerInstall',
+      'bowerInstall:demo',
       'connect',
       'open:dev',
       'watch'

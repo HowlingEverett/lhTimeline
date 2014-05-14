@@ -104,7 +104,7 @@ lhTimeline.service('MockChannel', function($rootScope) {
     }
 
 
-    success(this.channels(start, end)[contentIdentifier]);
+    success(null, this.channels(start, end)[contentIdentifier]);
 
   };
   
