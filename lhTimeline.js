@@ -133,13 +133,13 @@
         start = new Date(end.getTime() - (visibleMinutes * ONE_MINUTE));
       }
 
-      if ($attrs.startOfTime) {
+      if ($attrs.startOfTime && $attrs.startOfTime instanceof Date) {
         $scope.startOfTime = new Date($attrs.startOfTime);
       } else {
         $scope.startOfTime = _midnight;
       }
 
-      if ($attrs.endOfTime) {
+      if ($attrs.endOfTime && $attrs.endOfTime instanceof Date) {
         $scope.endOfTime = new Date($attrs.endOfTime);
       } else {
         $scope.endOfTime = new Date($scope.startOfTime.getTime() + 86400000);
@@ -197,7 +197,11 @@
     $scope.threshold = $attrs.threshold || 0.2;
 
     initialiseBounds();
-
+    
+    $scope.$on('timelineWorldBoundsChanged', function () {
+      initialiseBounds();
+    });
+    
     return $scope;
   });
 
@@ -237,27 +241,19 @@
         }
 
         function buildAdapter() {
-          var midnight
-            , midnightTomorrow
-            , pixelWidth
+          var pixelWidth
             , el;
 
-          midnight = new Date();
-          midnight.setHours(0);
-          midnight.setMinutes(0);
-          midnight.setSeconds(0);
-          midnight.setMilliseconds(0);
-          midnightTomorrow = new Date(midnight.getTime() + 86400000);
+          var totalDuration = timelineController.endOfTime -
+            timelineController.startOfTime;
 
-          pixelWidth = durationToPixels($element.width(), timelineController.duration(), 86400000);
+          pixelWidth = durationToPixels($element.width(), timelineController.duration(), totalDuration);
           el = $element.find('.timeline_content_wrapper');
           el.width(pixelWidth);
           el.css('min-height', '32px');
-          timelineController.startOfTime = midnight;
-          timelineController.endOfTime = midnightTomorrow;
           return {
-            start: midnight
-          , end: midnightTomorrow
+            start: timelineController.startOfTime
+          , end: timelineController.endOfTime
           , width: pixelWidth
           , element: el
           };
@@ -295,7 +291,7 @@
           var el
           , pixelWidth;
 
-          pixelWidth = durationToPixels($element.width(), timelineController.duration(), 86400000);
+          pixelWidth = durationToPixels($element.width(), timelineController.duration(), timelineController.endOfTime - timelineController.startOfTime);
           el = $element.find('.timeline_content_wrapper');
           el.width(pixelWidth);
           $scope.$broadcast('timelineResized', pixelWidth);
@@ -316,6 +312,7 @@
         setupElements();
         $element.on('scroll', scrollHandler);
         $element.on('resize', resizeHandler);
+        $scope.$on('timelineWorldBoundsChanged', resizeHandler);
         lastScrollLeft = $element.scrollLeft();
         pixelsScrolled = 0;
       }
@@ -431,7 +428,12 @@
           loading = false;
           earliestLoaded = timelineController.endOfTime;
           latestLoaded = timelineController.startOfTime;
-          repeats = [];
+          if (scope.repeats) {
+            scope.repeats.forEach(function (repeat) {
+              repeat.remove();
+            });
+          }
+          scope.repeats = [];
           fetch();
         }
 
@@ -498,19 +500,26 @@
 
         function insert(timelineItem) {
           var itemScope
-            , itemProp;
+            , itemProp
+            , baseProps;
 
+          baseProps = ['time', 'duration', 'type']
           itemScope = scope.$new();
+          itemScope.extraOpts = {};
           for (itemProp in timelineItem) {
             if (timelineItem.hasOwnProperty(itemProp)) {
-              itemScope[itemProp] = timelineItem[itemProp];
+              if (baseProps.indexOf(itemProp) !== -1) {
+                itemScope[itemProp] = timelineItem[itemProp];
+              } else {
+                itemScope.extraOpts[itemProp] = timelineItem[itemProp];
+              }
             }
           }
 
           linker(itemScope, function(clone) {
             positionTimelineItem(itemScope, clone, adapter.viewport);
             adapter.channel.append(clone);
-            repeats.push(clone);
+            scope.repeats.push(clone);
           });
         }
 
@@ -518,7 +527,7 @@
         adapter = buildAdapter();
         scope.$on('timelineScrolled', scrollHandler);
         scope.$on('timelineResized', resizeHandler);
-        scope.$watch(datasource.revision, reload);
+        scope.$on('timelineWorldBoundsChanged', reload);
         loadingFn = datasource.loading || function() {};
       }
     }
