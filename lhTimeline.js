@@ -113,14 +113,6 @@
     visibleMinutes = +$attrs.visibleMinutes || 10;
 
     function initialiseBounds() {
-      var _midnight;
-
-      _midnight = new Date();
-      _midnight.setHours(0);
-      _midnight.setMinutes(0);
-      _midnight.setSeconds(0);
-      _midnight.setMilliseconds(0);
-
       if ($attrs.end) {
         end = new Date($attrs.end);
       } else {
@@ -133,17 +125,6 @@
         start = new Date(end.getTime() - (visibleMinutes * ONE_MINUTE));
       }
 
-      if ($attrs.startOfTime && $attrs.startOfTime instanceof Date) {
-        $scope.startOfTime = new Date($attrs.startOfTime);
-      } else {
-        $scope.startOfTime = _midnight;
-      }
-
-      if ($attrs.endOfTime && $attrs.endOfTime instanceof Date) {
-        $scope.endOfTime = new Date($attrs.endOfTime);
-      } else {
-        $scope.endOfTime = new Date($scope.startOfTime.getTime() + 86400000);
-      }
     }
 
     $scope.buffer = function() {
@@ -244,16 +225,16 @@
           var pixelWidth
             , el;
 
-          var totalDuration = timelineController.endOfTime -
-            timelineController.startOfTime;
+          var totalDuration = $scope.activeWarrant.end -
+            $scope.activeWarrant.start;
 
           pixelWidth = durationToPixels($element.width(), timelineController.duration(), totalDuration);
           el = $element.find('.timeline_content_wrapper');
           el.width(pixelWidth);
           el.css('min-height', '32px');
           return {
-            start: timelineController.startOfTime
-          , end: timelineController.endOfTime
+            start: $scope.activeWarrant.start
+          , end: $scope.activeWarrant.end
           , width: pixelWidth
           , element: el
           };
@@ -291,9 +272,10 @@
           var el
           , pixelWidth;
 
-          pixelWidth = durationToPixels($element.width(), timelineController.duration(), timelineController.endOfTime - timelineController.startOfTime);
+          pixelWidth = durationToPixels($element.width(), timelineController.duration(), $scope.activeWarrant.end - $scope.activeWarrant.start);
           el = $element.find('.timeline_content_wrapper');
           el.width(pixelWidth);
+          setupElements();
           $scope.$broadcast('timelineResized', pixelWidth);
         }
 
@@ -321,12 +303,8 @@
     return {
       restrict: 'E'
     , transclude: true
+    , require: '?^lhTimelineViewport'
     , replace: true
-    , scope: {
-        title: '@'
-      , glyphicon: '@'
-      , channel: '=?'
-      }
     // , templateUrl: 'views/timeline_channel.html'
     , template: '<div class="timeline_channel">' +
         '<span class="channel_title">{{title}}</span>' +
@@ -339,26 +317,10 @@
       restrict: 'A'
     , transclude: 'element'
     , require: '?^lhTimelineViewport'
-    , scope: {
-      channel: '=?'
-    }
     , link: function(scope, iElement, iAttrs, timelineController, linker) {
         var datasource, adapter, match, datasourceName, loading, loadingFn
           , earliestLoaded, latestLoaded, repeats, contentIdentifiers, color
           , durationToPixels = $filter('durationToPixels');
-        
-        function getContentIdentifiers(attrString) {
-          var identifiers = {};
-          attrString.split(',').forEach(function (identifier) {
-            var k, v, _ref;
-            
-            _ref = identifier.trim().split(':');
-            k = _ref[0].trim();
-            v = _ref[1].trim();
-            identifiers[k] = v;
-          });
-          return identifiers;
-        }
         
         function initialize() {
           match = iAttrs.lhTimelineRepeat.match(/^\s*(\w+)\s+in\s+(\w+)\s*$/);
@@ -383,8 +345,6 @@
             }
           }
 
-          contentIdentifiers = getContentIdentifiers(iAttrs.contentIdentifiers);
-          color = iAttrs.color || "#5CB85C";
         }
 
         function buildAdapter() {
@@ -426,14 +386,21 @@
 
         function reload() {
           loading = false;
-          earliestLoaded = timelineController.endOfTime;
-          latestLoaded = timelineController.startOfTime;
+          earliestLoaded = scope.activeWarrant.end;
+          latestLoaded = scope.activeWarrant.start;
           if (scope.repeats) {
             scope.repeats.forEach(function (repeat) {
               repeat.remove();
             });
           }
           scope.repeats = [];
+
+          contentIdentifiers = {
+            imei: scope.activeWarrant.imei
+          , type: scope.channel.type
+          };
+          color = scope.channel.color || "#5CB85C";
+
           fetch();
         }
 
@@ -474,7 +441,7 @@
         }
 
         function itemLeftOffset(itemData, viewport) {
-          var offset = itemData.time - timelineController.startOfTime;
+          var offset = new Date(itemData.time) - scope.activeWarrant.start;
           return durationToPixels(viewport.width(), timelineController.duration(), offset);
         }
 
