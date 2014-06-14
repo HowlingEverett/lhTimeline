@@ -125,6 +125,7 @@
         start = new Date(end.getTime() - (visibleMinutes * ONE_MINUTE));
       }
 
+      $scope.centre = $attrs.centre;
     }
 
     $scope.buffer = function() {
@@ -144,6 +145,8 @@
     $scope.end = function() {
       return end;
     };
+
+    
 
     $scope.bufferStart = function() {
       return new Date(start.getTime() - $scope.buffer());
@@ -291,7 +294,6 @@
           $element.scrollLeft(startLeft);
         }
 
-        setupElements();
         $element.on('scroll', scrollHandler);
         $element.on('resize', resizeHandler);
         $scope.$on('timelineWorldBoundsChanged', resizeHandler);
@@ -316,6 +318,10 @@
     return {
       restrict: 'A'
     , transclude: 'element'
+    , scope: {
+      channel: '='
+    , activeWarrant: '='
+    }
     , require: '?^lhTimelineViewport'
     , link: function(scope, iElement, iAttrs, timelineController, linker) {
         var datasource, adapter, match, datasourceName, loading, loadingFn
