@@ -275,7 +275,9 @@
           var el
           , pixelWidth;
 
-          pixelWidth = durationToPixels($element.width(), timelineController.duration(), $scope.activeWarrant.end - $scope.activeWarrant.start);
+          pixelWidth = durationToPixels($element.width()
+            , timelineController.duration()
+            , $scope.activeWarrant.end - $scope.activeWarrant.start);
           el = $element.find('.timeline_content_wrapper');
           el.width(pixelWidth);
           setupElements();
