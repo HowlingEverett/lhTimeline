@@ -299,6 +299,23 @@
         $scope.$on('timelineWorldBoundsChanged', resizeHandler);
         lastScrollLeft = $element.scrollLeft();
         pixelsScrolled = 0;
+
+        $scope.$watch('centreDate', function(newCentre) {
+          var startLeft, newStart, newEnd;
+          
+          if (!newCentre) {
+            return;
+          }
+
+          newStart = new Date(newCentre.getTime() - (timelineController.duration() / 2));
+          newEnd = new Date(newCentre.getTime() + (timelineController.duration() / 2));
+          timelineController.setTimelineBounds(newStart, newEnd);
+          
+          var startLeft = durationToPixels($element.width()
+            , timelineController.duration()
+            , timelineController.start() - adapter.start);
+          $element.scrollLeft(startLeft);
+        });
       }
     }
   }).directive('lhTimelineChannel', function() {
